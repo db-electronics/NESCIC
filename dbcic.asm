@@ -166,8 +166,8 @@ keyload
 
 ; need to burn 358 cycles
 	movlw	0x75	    ; 1 - load 117
-	call	wait	    ; wait = (3*(W-1)) + 7 = 355
-	nop		    ; 1
+	call	wait	    ; wait = (3*(W-1)) + 7 = 353
+	clrf	0x31	    ; 1 clear lock stream ID
 	nop		    ; 1
 			
 ; --------lock sends stream ID. 15 cycles per bit--------
@@ -665,12 +665,7 @@ die
 	andlw	0x60	    ; fix overflow at 128
 	movwf	EEDATA	    ; store back to eeprom
 	bsf	EECON1, WREN
-
-die_intloop
 	bcf	INTCON, GIE
-	btfsc	INTCON, GIE
-	goto	die_intloop
-	
 	movlw	0x55
 	movwf	EECON2
 	movlw	0xAA
@@ -679,9 +674,12 @@ die_intloop
 	bsf	INTCON, GIE
 
 	banksel	GPIO
-	bcf	GPIO, 4
 ; --------get caught up--------
 die_trap
+	bsf	GPIO, 4		; LED on
+	nop
+	nop
+	bcf	GPIO, 4		; LED on
 	goto	die_trap
 ; -----------------------------------------------------------------------
 supercic_pairmode
