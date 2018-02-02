@@ -33,7 +33,7 @@
         <targetPluginBoard></targetPluginBoard>
         <platformTool>Simulator</platformTool>
         <languageToolchain>MPASMWIN</languageToolchain>
-        <languageToolchainVersion>5.62</languageToolchainVersion>
+        <languageToolchainVersion>5.76</languageToolchainVersion>
         <platform>3</platform>
       </toolsSet>
       <compileType>
@@ -48,6 +48,8 @@
           <parseOnProdLoad>true</parseOnProdLoad>
           <alternateLoadableFile></alternateLoadableFile>
         </loading>
+        <subordinates>
+        </subordinates>
       </compileType>
       <makeCustomizationType>
         <makeCustomizationPreStepEnabled>false</makeCustomizationPreStepEnabled>
