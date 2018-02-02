@@ -5,7 +5,7 @@
 ;   based on reverse engineering work and disassembly by segher,
 ;   http://hackmii.com/2010/01/the-weird-and-wonderful-cic/
 ;   
-;   Copyright (C) 2016 by René Richard (db) <rene@db-electronics.ca>
+;   Copyright (C) 2018 by René Richard (db) <rene@db-electronics.ca>
 ;
 ;   This program is free software: you can redistribute it and/or modify
 ;   it under the terms of the GNU General Public License as published by
@@ -270,7 +270,7 @@ swapskip
 mangle
 	call	mangle_lock
 	nop
-	nop
+	nop		    ; 84
 mangle_key
 	movf	0x2f, w
 	movwf	0x20	
@@ -445,6 +445,7 @@ mangle_key_withskip
 mangle_return
 	return
 ; 73 when goto, 73 when return
+	; missing NOPs?!
 ; CIC has 84 -> 11 nops
 
 mangle_lock
