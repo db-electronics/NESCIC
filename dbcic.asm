@@ -50,9 +50,11 @@
 ;   0x30		buffer for seed calc
 ;   0x31 - 0x3f		seed area (key seed; 0x31 filled in by lock)
 ;   0x40 - 0x41		buffer for seed calc
+;   0x42		X register
 ;   0x4d		buffer for eeprom access
 ;   0x4e		loop variable for longwait
 ;   0x4f		loop variable for wait
+xreg	equ	0x42
 ; ---------------------------------------------------------------------
 #include <p12f629.inc>
 ; -----------------------------------------------------------------------
@@ -139,13 +141,64 @@ main
 
 ; -- 149 cycles, 5 cycles to burn
 doneload
-	nop
-	nop
+	movlw	0x30
+	movwf	FSR
 	nop
 	nop
 	nop
 
+; -----------------------------------------------------------------------
 ;-- 154 cycles to main loop
+mainloop
+;051: 31      ldi 1	; A := 1
+;028: 5c      lxa	; X := A
+;054: 74      lbmi 0	; H := 0
+	movlw	0x01		; ldi 1
+	movwf	xreg		; lxa - load x with a
+				; ahead by 1 cycle here
+	
+;06a: 7c c7   tml 147	; call 147	// [H:0] := next stream bit
+	call	nextstreambit
+
+; -----------------------------------------------------------------------
+nextstreambit
+;	[H:0] := NEXT STREAM BIT
+;147: 5d      xax
+;163: 5c      lxa
+;171: 57      xal
+;138: 40      l
+;15c: 20      lbli 0
+;16e: 64      ska 0
+;137: 9b      t 11b	; if [H:X].0 = 1 {
+;15b: 35      ldi 5
+;16d: 4a      s		;	[H:0] := 5
+;136: 4c      rit	;	return
+;			; } else {
+;11b: 30      ldi 0
+;14d: 4a      s		;	[H:0] := 0
+;126: 4c      rit	;	return
+;			; }
+	
+	movfw	xreg		; xax - not really exchanging but its overwritten right after
+	;movwf	xreg		; lxa - what's the point?
+	addwf	FSR		; add x (a really) 
+	btfss	INDF,0		; l, ska 0 - skip if bit0 = 0 
+	goto	nsbskip		; t 11b
+	movlw	0xF0		; lbli 0
+	andwf	FSR		; lbli 0
+	movlw	0x05		; ldi 5
+	movwf	INDF		; s
+	return
+nsbskip
+	movlw	0xF0		; lbli 0
+	andwf	FSR		; lbli 0
+	clrw			; ldi
+	movwf	INDF		; s
+	return
+	
+;01a: 75      lbmi 1	; H := 1
+;00d: 7c c7   tml 147	; call 147	// [H:0] := next stream bit	
+	
 loop	
 	movlw	0x1
 loop0
@@ -605,9 +658,9 @@ supercic_pairmode_loop
 	goto	supercic_pairmode_loop
 
 ; -----------------------------------------------------------------------
-;-- 3193 - USA/Canada 
-;-- LOCK: 3952F20F9109997 
-;-- LOAD LOCK SEED (30 cycles)
+; 3193 - USA/Canada 
+; LOCK: 3952F20F9109997 
+; LOAD LOCK SEED (30 cycles)
 ; 30 + 28 + 2 for final goto = 60
 load3193
 	movlw	0x3
@@ -641,9 +694,8 @@ load3193
 	movlw	0x7
 	movwf 	0x2F
 	
-;3193 - USA/Canada 
-;KEY: x952129F910DF97 	
-;-- LOAD KEY SEED (28 cycles)
+; 3193 - USA/Canada 
+; KEY: x952129F910DF97 	
 	movlw	0x9
 	movwf	0x32
 	movlw	0x5
@@ -674,9 +726,211 @@ load3193
 	movwf 	0x3F	
 	goto	doneload
 
+; -----------------------------------------------------------------------
+; 3195 - Europe 
+; LOCK: $17BEF0AF5706617 
+; LOAD LOCK SEED (30 cycles)
+; 30 + 28 + 2 for final goto = 60
 load3195
+	movlw	0x1
+	movwf	0x21
+	movlw	0x7
+	movwf	0x22
+	movlw	0xB
+	movwf	0x23
+	movlw	0xE
+	movwf	0x24
+	movlw	0xF
+	movwf 	0x25
+	movlw	0x0
+	movwf 	0x26
+	movlw	0xA
+	movwf 	0x27
+	movlw	0xF
+	movwf 	0x28
+	movlw	0x5
+	movwf 	0x29
+	movlw	0x7
+	movwf 	0x2A
+	movlw	0x0
+	movwf 	0x2B
+	movlw	0x6
+	movwf 	0x2C
+	movlw	0x6
+	movwf 	0x2D
+	movlw	0x1
+	movwf 	0x2E
+	movlw	0x7
+	movwf 	0x2F
+	
+; 3195 - Europe 
+; KEY: $x7BD309F6EF2F97 
+	movlw	0x7
+	movwf	0x32
+	movlw	0xB
+	movwf	0x33
+	movlw	0xD
+	movwf	0x34
+	movlw	0x3
+	movwf 	0x35
+	movlw	0x0
+	movwf 	0x36
+	movlw	0x9
+	movwf 	0x37
+	movlw	0xF
+	movwf 	0x38
+	movlw	0x6
+	movwf 	0x39
+	movlw	0xE
+	movwf 	0x3A
+	movlw	0xF
+	movwf 	0x3B
+	movlw	0x2
+	movwf 	0x3C
+	movlw	0xF
+	movwf 	0x3D
+	movlw	0x9
+	movwf 	0x3E
+	movlw	0x7
+	movwf 	0x3F	
+	goto	doneload
+
+; -----------------------------------------------------------------------
+; 3196 - Asia 
+; LOCK: 06AD70AF6EF666C  
+; LOAD LOCK SEED (30 cycles)
+; 30 + 28 + 2 for final goto = 60
 load3196
+	movlw	0x0
+	movwf	0x21
+	movlw	0x6
+	movwf	0x22
+	movlw	0xA
+	movwf	0x23
+	movlw	0xD
+	movwf	0x24
+	movlw	0x7
+	movwf 	0x25
+	movlw	0x0
+	movwf 	0x26
+	movlw	0xA
+	movwf 	0x27
+	movlw	0xF
+	movwf 	0x28
+	movlw	0x6
+	movwf 	0x29
+	movlw	0xE
+	movwf 	0x2A
+	movlw	0xF
+	movwf 	0x2B
+	movlw	0x6
+	movwf 	0x2C
+	movlw	0x6
+	movwf 	0x2D
+	movlw	0x6
+	movwf 	0x2E
+	movlw	0xC
+	movwf 	0x2F
+	
+; 3196 - Asia
+; KEY: x6ADCF606EF2F97 
+	movlw	0x6
+	movwf	0x32
+	movlw	0xA
+	movwf	0x33
+	movlw	0xD
+	movwf	0x34
+	movlw	0xC
+	movwf 	0x35
+	movlw	0xF
+	movwf 	0x36
+	movlw	0x6
+	movwf 	0x37
+	movlw	0x0
+	movwf 	0x38
+	movlw	0x6
+	movwf 	0x39
+	movlw	0xE
+	movwf 	0x3A
+	movlw	0xF
+	movwf 	0x3B
+	movlw	0x2
+	movwf 	0x3C
+	movlw	0xF
+	movwf 	0x3D
+	movlw	0x9
+	movwf 	0x3E
+	movlw	0x7
+	movwf 	0x3F	
+	goto	doneload
+	
+; -----------------------------------------------------------------------
+; 3197 - UK/Italy/Australia  
+; LOCK: 558937A00E0D66D   
+; LOAD LOCK SEED (30 cycles)
+; 30 + 28 + 2 for final goto = 60
 load3197
+	movlw	0x5
+	movwf	0x21
+	movlw	0x5
+	movwf	0x22
+	movlw	0x8
+	movwf	0x23
+	movlw	0x9
+	movwf	0x24
+	movlw	0x3
+	movwf 	0x25
+	movlw	0x7
+	movwf 	0x26
+	movlw	0xA
+	movwf 	0x27
+	movlw	0x0
+	movwf 	0x28
+	movlw	0x0
+	movwf 	0x29
+	movlw	0xE
+	movwf 	0x2A
+	movlw	0x0
+	movwf 	0x2B
+	movlw	0xD
+	movwf 	0x2C
+	movlw	0x6
+	movwf 	0x2D
+	movlw	0x6
+	movwf 	0x2E
+	movlw	0xD
+	movwf 	0x2F
+	
+; 3197 - UK/Italy/Australia
+; KEY: x79AA1E0D019D99 
+	movlw	0x7
+	movwf	0x32
+	movlw	0x9
+	movwf	0x33
+	movlw	0xA
+	movwf	0x34
+	movlw	0xA
+	movwf 	0x35
+	movlw	0x1
+	movwf 	0x36
+	movlw	0xE
+	movwf 	0x37
+	movlw	0x0
+	movwf 	0x38
+	movlw	0xD
+	movwf 	0x39
+	movlw	0x0
+	movwf 	0x3A
+	movlw	0x1
+	movwf 	0x3B
+	movlw	0x9
+	movwf 	0x3C
+	movlw	0xD
+	movwf 	0x3D
+	movlw	0x9
+	movwf 	0x3E
+	movlw	0x9
+	movwf 	0x3F	
 	goto	doneload
 	
 ;-- change region in eeprom and die
