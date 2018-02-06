@@ -1,9 +1,10 @@
-#include <p12f629.inc>
-
 ; ---------------------------------------------------------------------
-;   NES multi-region CIC heavily inspired from SUPER CIC which is itslelf
-;   based on reverse engineering work and disassembly by segher,
-;   http://hackmii.com/2010/01/the-weird-and-wonderful-cic/
+;   file dbcic.asm
+;   author René Richard
+;   brief
+;	NES multi-region CIC heavily inspired from SUPER CIC which is itself
+;	based on reverse engineering work and disassembly by segher,
+;	http://hackmii.com/2010/01/the-weird-and-wonderful-cic/
 ;   
 ;   Copyright (C) 2018 by René Richard (db) <rene@db-electronics.ca>
 ;
@@ -24,12 +25,12 @@
 ;
 ;   pinout :  CIC
 ;
-;                   ,---_---.
-;      +5V     [16] |1     8| GND [8]
-;      CIC clk [6]  |2     7| CIC data out 0 [2]
-;        status out |3     6| CIC data in  1 [1]
-;             /NTSC |4     5| CIC slave reset [7]
-;                   `-------'
+;                   ,-------_-------.
+;      +5V     [16] |1 Vdd     GND 8| GND [8]
+;      CIC clk [6]  |2 GP5     GPO 7| CIC data out 0 [2]
+;        status out |3 GP4     GP1 6| CIC data in  1 [1]
+;                GP |4 GP3     GP2 5| CIC slave reset [7]
+;                   `-------'-------
 ;
 ;
 ;   Status out can be connected to a LED. It indicates:
@@ -52,14 +53,10 @@
 ;   0x4d		buffer for eeprom access
 ;   0x4e		loop variable for longwait
 ;   0x4f		loop variable for wait
-;   0x5e                SuperCIC pair mode detect (phase 1)
-;   0x5f                SuperCIC pair mode detect (phase 2)
 ; ---------------------------------------------------------------------
-
-
+#include <p12f629.inc>
 ; -----------------------------------------------------------------------
-    __CONFIG _EC_OSC & _WDT_OFF & _PWRTE_OFF & _MCLRE_OFF & _CP_OFF & _CPD_OFF
-    
+    __CONFIG _EC_OSC & _WDT_OFF & _PWRTE_OFF & _MCLRE_OFF & _CP_OFF & _CPD_OFF 
 ; -----------------------------------------------------------------------
 ; program start
 	org	0x0000
@@ -72,17 +69,17 @@ isr
 ; 2 cycles to here from POR or ISR
 main				
 	banksel GPIO
-	clrf	GPIO
-	movlw	0x07	    ; GPIO2..0 are digital I/O (not connected to comparator)
+	clrf	GPIO		; clear the output port
+	movlw	0x07		; GPIO2..0 = digital I/O
 	movwf	CMCON
-	movlw	0x90	    ; global enable interrupts + enable external interrupt
+	movlw	0x90		; global enable interrupts + enable external interrupt
 	movwf	INTCON
 	banksel	TRISIO
-	movlw	0x2d	    ; in out in in out in
+	movlw	0x2d		; 5 = in, 4 = out, 3 = in, 2 = in, 1 = out, 0 = in
 	movwf	TRISIO
-	movlw	0x24	    ; pullups for reset+clk to avoid errors when no CIC in host 
+	movlw	0x24		; weak pull-up on 5 and 2
 	movwf	WPU
-	movlw	0x00	    ; 0x80 for global pullup disable
+	movlw	0x00		; pull-up enable, GP2 falling edge int
 	movwf	OPTION_REG
 	banksel GPIO
 
@@ -121,132 +118,34 @@ main
 ;-- 80 cycles to here
 ;-- both seeds must be loaded within cycle 154
 ;-- 154 - 80 = 74 cycles to load
-	
-;3193 - USA/Canada 
-;LOCK: 3952F20F9109997 
-;KEY: x952129F910DF97 
-	
-;-- LOAD LOCK SEED
-	
-	movlw	0x3
-	movwf	0x21
-	movlw	0x9
-	movwf	0x22
-	movlw	0x5
-	movwf	0x23
-	movlw	0x2
-	movwf	0x24
-	movlw	0xF
-	movwf 	0x25
-	movlw	0x2
-	movwf 	0x26
-	movlw	0x0
-	movwf 	0x27
-	movlw	0xF
-	movwf 	0x28
-	movlw	0x9
-	movwf 	0x29
-	movlw	0x1
-	movwf 	0x2A
-	movlw	0x0
-	movwf 	0x2b
-	movlw	0x9
-	movwf 	0x2c
-	movlw	0x9
-	movwf 	0x2d
-	movlw	0x9
-	movwf 	0x2e
-	movlw	0x7
-	movwf 	0x2f
-	
-			    
-; --------INIT LOCK SEED (what the lock sends)--------
-; new code by db to set the NES lock and key seeds, read from eeprom
-	
-	banksel	EEADR	    ; 1
-	movlw	0x0F	    ; 1
-	movwf	EEADR	    ; 1 - point to region byte
-	bsf	EECON1,RD   ; 1 - read eeprom
-	movf	EEDATA,W    ; 1 - read into wreg
-	movwf	EEADR	    ; 1 - it contained a pointer into EE memory
-			    ; 6 + 3
-	    ; prepare fsr for lock in 0x21 - 0x2f
-	movlw	0x21	    ; 1 - point to lock seed mem
-	movwf	FSR	    ; 1 - in FSR
-	movlw	0x0F	    ; 1 - 15 values to load
-	movwf	0xCF	    ; 1 - store
-			    ; 4 + 6 + 3 = 13 cycles
-lockload	
-	bsf	EECON1,RD   ; 1 - read eeprom
-	movf	EEDATA,W    ; 1 - read
-	movwf	INDF	    ; 1 - store to ram
-	incf	FSR	    ; 1 - inc ram pointer
-	incf	EEADR	    ; 1 - inc eeprom pointer
-	decfsz	0xCF	    ; 1 (2 on skip) - iteration variable decrement
-	goto	lockload    ; 2
-			    ; loop 15 times
-			    ; (14 x 8) + 7 = 119
-			    ; 119 + 13 cycles
-	
-	    ; now EEADR points to lock + 15
-	incf	EEADR	    ; 1 - skip 1 for align 16 data
-	incf	FSR	    ; 1 - same
-	movlw	0x0F	    ; 1 - 15 values to load
-	movwf	0xCF	    ; 1 - store
-			    ; 4 + 119 + 13 cycles
-keyload	
-	bsf	EECON1,RD   ; 1 - read eeprom
-	movf	EEDATA,W    ; 1 - read
-	movwf	INDF	    ; 1 - store to ram
-	incf	FSR	    ; 1 - inc ram pointer
-	incf	EEADR	    ; 1 - inc eeprom pointer
-	decfsz	0xCF	    ; 1 (2 on skip) - iteration variable decrement
-	goto	keyload     ; 2	
-	banksel GPIO	    ; 1
-			    ; loop 15 times
-			    ; (14 x 8) + 7 + 1 = 120
-			    ; total = 120 + 4 + 119 + 13 = 256
-			    ; 614 - 256 = 358
+;-- curent region is stored in eeprom, load and call proper loading subroutine
+	banksel	EEADR		; 1
+	movlw	0x00		; 1 - point to region byte
+	movwf	EEADR		; 1
+	bsf	EECON1,RD	; 1 - read eeprom
+	movf	EEDATA,W	; 1 - region indicator in wreg
 
-; need to burn 358 cycles
-	movlw	0x75	    ; 1 - load 117
-	call	wait	    ; wait = (3*(W-1)) + 7 = 353
-	clrf	0x31	    ; 1 clear lock stream ID
-	nop		    ; 1
-			
-; --------lock sends stream ID. 15 cycles per bit--------
-	btfsc	GPIO, 0		; check stream ID bit
-	bsf	0x31, 3		; copy to lock seed
-	movlw	0x2		; wait=3*W+5
-	call	wait		; burn 11 cycles
+;-- 85 cycles
+; 0x00 = 3193 - USA/Canada
+; 0x01 = 3195 - Europe
+; 0x02 = 3196 - Asia 
+; 0x03 = 3197 - UK/Italy/Australia
+	
+	addwf	PCL,f		; 2 - computed goto for proper lock/key load
+	goto	load3193	; 2 + 60 - load USA/Canada seeds
+	goto	load3195	; 2 + 60 - load Europe seeds
+	goto	load3196	; 2 + 60 - load Asia seeds
+	goto	load3197	; 2 + 60 - load UK/Italy/Australia seeds
+
+; -- 149 cycles, 5 cycles to burn
+doneload
+	nop
+	nop
+	nop
 	nop
 	nop
 
-	btfsc	GPIO, 0		; check stream ID bit
-	bsf	0x31, 0		; copy to lock seed
-	movlw	0x2		;
-	call	wait		; burn 11 cycles
-	nop
-	nop
-
-	btfsc	GPIO, 0		; check stream ID bit
-	bsf	0x31, 1		; copy to lock seed
-	movlw	0x2		;
-	call	wait		; burn 11 cycles
-	nop
-	nop
-
-	btfsc	GPIO, 0		; check stream ID bit
-	bsf	0x31, 2		; copy to lock seed
-	banksel	TRISIO
-	bcf	TRISIO, 0
-	bsf	TRISIO, 1
-	banksel	GPIO
-	nop
-	movlw	0x27		; "wait" 1
-	call	wait		; wait 121
-				; 3*(39-1)+7 = 121
-; --------main loop--------
+;-- 154 cycles to main loop
 loop	
 	movlw	0x1
 loop0
@@ -692,23 +591,111 @@ longwait0
 	goto	longwait0
 	return
 
-; --------change region in eeprom and die--------
-; new code by db, need to change the region in eeprom
-; region points to the start of the region's lock seed in eeprom
+; -----------------------------------------------------------------------
+supercic_pairmode
+	banksel	TRISIO
+	bsf	TRISIO, 0
+	bsf	TRISIO, 1
+	banksel	GPIO
+supercic_pairmode_loop
+	bsf	GPIO, 4
+	nop
+	nop
+	bcf	GPIO, 4
+	goto	supercic_pairmode_loop
+
+; -----------------------------------------------------------------------
+;-- 3193 - USA/Canada 
+;-- LOCK: 3952F20F9109997 
+;-- LOAD LOCK SEED (30 cycles)
+; 30 + 28 + 2 for final goto = 60
+load3193
+	movlw	0x3
+	movwf	0x21
+	movlw	0x9
+	movwf	0x22
+	movlw	0x5
+	movwf	0x23
+	movlw	0x2
+	movwf	0x24
+	movlw	0xF
+	movwf 	0x25
+	movlw	0x2
+	movwf 	0x26
+	movlw	0x0
+	movwf 	0x27
+	movlw	0xF
+	movwf 	0x28
+	movlw	0x9
+	movwf 	0x29
+	movlw	0x1
+	movwf 	0x2A
+	movlw	0x0
+	movwf 	0x2B
+	movlw	0x9
+	movwf 	0x2C
+	movlw	0x9
+	movwf 	0x2D
+	movlw	0x9
+	movwf 	0x2E
+	movlw	0x7
+	movwf 	0x2F
+	
+;3193 - USA/Canada 
+;KEY: x952129F910DF97 	
+;-- LOAD KEY SEED (28 cycles)
+	movlw	0x9
+	movwf	0x32
+	movlw	0x5
+	movwf	0x33
+	movlw	0x2
+	movwf	0x34
+	movlw	0xF
+	movwf 	0x35
+	movlw	0x2
+	movwf 	0x36
+	movlw	0x0
+	movwf 	0x37
+	movlw	0xF
+	movwf 	0x38
+	movlw	0x9
+	movwf 	0x39
+	movlw	0x1
+	movwf 	0x3A
+	movlw	0x0
+	movwf 	0x3B
+	movlw	0x9
+	movwf 	0x3C
+	movlw	0x9
+	movwf 	0x3D
+	movlw	0x9
+	movwf 	0x3E
+	movlw	0x7
+	movwf 	0x3F	
+	goto	doneload
+
+load3195
+load3196
+load3197
+	goto	doneload
+	
+;-- change region in eeprom and die
 ; 0x00 = 3193 - USA/Canada
-; 0x20 = 3197 - UK/Italy/Australia
-; 0x40 = 3195 - Europe 
-; 0x60 = 3196 - Asia 
-;   so, to change region, add 0x20 and AND with 0x60 to ensure no unwanted bits
+; 0x01 = 3195 - Europe
+; 0x02 = 3196 - Asia 
+; 0x03 = 3197 - UK/Italy/Australia
 die
 	banksel	EEADR
-	movlw	0x0F	    ; point to region
-	movwf	EEADR	    ; store to address
-	bsf	EECON1,RD   ; read eeprom
-	movf	EEDATA,W    ; move to wreg
-	addlw	0x20	    ; add 0x20 for next region
-	andlw	0x60	    ; fix overflow at 128
-	movwf	EEDATA	    ; store back to eeprom
+	movlw	0x0F		; point to region
+	movwf	EEADR		; store to address
+	bsf	EECON1,RD	; read eeprom
+	movf	EEDATA,W	; move to wreg
+	movwf   0x4D		; store in 4D
+	incf	0x4D,f		; increment
+	btfsc	0x4D, 2		; check if region is greater than 3
+	clrf	0x4D		; wrap around back to 0
+	movf	0x4D,W		; store region in wreg
+	movwf	EEDATA		; store back to eeprom
 	bsf	EECON1, WREN
 	bcf	INTCON, GIE
 	movlw	0x55
@@ -726,45 +713,12 @@ die_trap
 	nop
 	bcf	GPIO, 4		; LED on
 	goto	die_trap
-; -----------------------------------------------------------------------
-supercic_pairmode
-	banksel	TRISIO
-	bsf	TRISIO, 0
-	bsf	TRISIO, 1
-	banksel	GPIO
-supercic_pairmode_loop
-	bsf	GPIO, 4
-	nop
-	nop
-	bcf	GPIO, 4
-	goto	supercic_pairmode_loop
-
+	
 ; eeprom memory
-;   the 16th byte of each seed is unused, therefore, I used addr 0x0F to store
-;   the current region since 12F629 only has 128 bytes of eeprom
+; 0x00 = 3193 - USA/Canada
+; 0x01 = 3195 - Europe
+; 0x02 = 3196 - Asia 
+; 0x03 = 3197 - UK/Italy/Australia	
 DEEPROM code
-;3193 - USA/Canada 
-;LOCK: 3952F20F9109997
-;KEY:  x952129F910DF97 
-	de	0x3,0x9,0x5,0x2,0xF,0x2,0x0,0xF,0x9,0x1,0x0,0x9,0x9,0x9,0x7,0
-	de	0x0,0x9,0x5,0x2,0x1,0x2,0x9,0xF,0x9,0x1,0x0,0xD,0xF,0x9,0x7,0
-	
-;3197 - UK/Italy/Australia 
-;LOCK: 558937A00E0D66D 
-;KEY:  x79AA1E0D019D99
-	de	0x5,0x5,0x8,0x9,0x3,0x7,0xA,0x0,0x0,0xE,0x0,0xD,0x6,0x6,0xD,0
-	de	0x0,0x7,0x9,0xA,0xA,0x1,0xE,0x0,0xD,0x0,0x1,0x9,0xD,0x9,0x9,0
-	
-;3195 - Europe 
-;LOCK: 17BEF0AF5706617
-;KEY:  x7BD309F6EF2F97  
-	de	0x1,0x7,0xB,0xE,0xF,0x0,0xA,0xF,0x5,0x7,0x0,0x6,0x6,0x1,0x7,0
-	de	0x0,0x7,0xB,0xD,0x3,0x0,0x9,0xF,0x6,0xE,0xF,0x2,0xF,0x9,0x7,0
-
-;3196 - Asia 
-;LOCK: 06AD70AF6EF666C
-;KEY:  x6ADCF606EF2F97  
-	de	0x0,0x6,0xA,0xD,0x7,0x0,0xA,0xF,0x6,0xE,0xF,0x6,0x6,0x6,0xC,0
-	de	0x0,0x6,0xA,0xD,0xC,0xF,0x6,0x0,0x6,0xE,0xF,0x2,0xF,0x9,0x7,0
-	
+	de	0x00		; region indicator byte, default to USA/Canada
 	end
