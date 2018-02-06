@@ -61,61 +61,105 @@
     __CONFIG _EC_OSC & _WDT_OFF & _PWRTE_OFF & _MCLRE_OFF & _CP_OFF & _CPD_OFF
     
 ; -----------------------------------------------------------------------
-; code memory
+; program start
 	org	0x0000
-	nop
-	nop
-	nop
-	goto	init
+	goto	main
 isr
 	org	0x0004
-	bcf	INTCON, 1	; clear interrupt cause
-	bcf	GPIO, 0
-	bcf	GPIO, 1
-	bsf	GPIO, 4		; LED on
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
-	bsf	INTCON, 7	; re-enable interrupts (ISR will continue as main)
-	goto	main
-init
-	org	0x0010
+	bcf	INTCON, 1	; clear interrupt flag
+	bsf	INTCON, 7	; re-enable interrupts
+
+; 2 cycles to here from POR or ISR
+main				
 	banksel GPIO
 	clrf	GPIO
-	movlw	0x07	; GPIO2..0 are digital I/O (not connected to comparator)
+	movlw	0x07	    ; GPIO2..0 are digital I/O (not connected to comparator)
 	movwf	CMCON
-	movlw	0x90	; global enable interrupts + enable external interrupt
+	movlw	0x90	    ; global enable interrupts + enable external interrupt
 	movwf	INTCON
 	banksel	TRISIO
-	movlw	0x2d	; in out in in out in
+	movlw	0x2d	    ; in out in in out in
 	movwf	TRISIO
-	movlw	0x24	; pullups for reset+clk to avoid errors when no CIC in host 
+	movlw	0x24	    ; pullups for reset+clk to avoid errors when no CIC in host 
 	movwf	WPU
-	movlw	0x00	; 0x80 for global pullup disable
+	movlw	0x00	    ; 0x80 for global pullup disable
 	movwf	OPTION_REG
-	
 	banksel GPIO
-	bsf 	GPIO, 4	; LED on
-idle
-	goto	idle	; wait for interrupt from lock
 
-main
-; super cic uses 614 cycle until lock sends stream id
-; 31 load lock super cic
-; 34 load key super cic
-; 1 load 181 into wreg
-; call wait with 181 = 547
-; clrf
-; 614 cycles from main
+;-- 16 cycles to here
+;-- lock sends stream ID. 15 cycles per bit--------
+;-- stream id read at 34, 49, 64 and 79
 	
-	banksel	TRISIO	    ;1
-	bsf	TRISIO, 0   ;1
-	bcf	TRISIO, 1   ;1
-			    ;3 cycles
+;-- burn 18 cycles
+	movlw	0x4		; wait = (3*W) + 5
+	call	wait		; burn 17 cycles
 	
+	btfsc	GPIO, 0		; check stream ID bit
+	bsf	0x31, 3		; copy to lock seed
+	movlw	0x2		; wait=3*W+5
+	call	wait		; burn 11 cycles
+	nop
+	nop
+
+	btfsc	GPIO, 0		; check stream ID bit
+	bsf	0x31, 0		; copy to lock seed
+	movlw	0x2		;
+	call	wait		; burn 11 cycles
+	nop
+	nop
+
+	btfsc	GPIO, 0		; check stream ID bit
+	bsf	0x31, 1		; copy to lock seed
+	movlw	0x2		;
+	call	wait		; burn 11 cycles
+	nop
+	nop
+
+	btfsc	GPIO, 0		; check stream ID bit
+	bsf	0x31, 2		; copy to lock seed
+
+;-- 80 cycles to here
+;-- both seeds must be loaded within cycle 154
+;-- 154 - 80 = 74 cycles to load
+	
+;3193 - USA/Canada 
+;LOCK: 3952F20F9109997 
+;KEY: x952129F910DF97 
+	
+;-- LOAD LOCK SEED
+	
+	movlw	0x3
+	movwf	0x21
+	movlw	0x9
+	movwf	0x22
+	movlw	0x5
+	movwf	0x23
+	movlw	0x2
+	movwf	0x24
+	movlw	0xF
+	movwf 	0x25
+	movlw	0x2
+	movwf 	0x26
+	movlw	0x0
+	movwf 	0x27
+	movlw	0xF
+	movwf 	0x28
+	movlw	0x9
+	movwf 	0x29
+	movlw	0x1
+	movwf 	0x2A
+	movlw	0x0
+	movwf 	0x2b
+	movlw	0x9
+	movwf 	0x2c
+	movlw	0x9
+	movwf 	0x2d
+	movlw	0x9
+	movwf 	0x2e
+	movlw	0x7
+	movwf 	0x2f
+	
+			    
 ; --------INIT LOCK SEED (what the lock sends)--------
 ; new code by db to set the NES lock and key seeds, read from eeprom
 	

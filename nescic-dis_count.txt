@@ -79,10 +79,11 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 
 			;; INIT KEY IN NORMAL MODE
 00c: 47      out0	; P0 := 0
-046: 7d 00   tml 200	; call 200	// init stream - call 200 = 141 cycles
+046: 7d 00   tml 200	; call 200	// init stream - call 200 = 141 cycles (read stream id at 21, 36, 51 and 66)
 			; 3 cycles ( + 10 from KEY START) = 13 cycles from POR
 			; 154 cycles from POR
-
+			; stream id read at 34, 49, 64 and 79
+			; lock and key values fully loaded at 154 cycles from POR
 
 
 			;; MAIN LOOP
@@ -356,7 +357,8 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 
 
 
-			;; INIT STREAM
+			;; INIT STREAM (141 cycles when key)
+			; read stream id at 21, 36, 51 and 66 (15 cycles per bit)
 200: 7c 83   tml 103    ; 5 cycles when key + 2 for call
 260: 8e      t 20e	; if lock {
 270: 75      lbmi 1
@@ -384,7 +386,7 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 207: 21      lbli 1	;	L := 1
 243: 3f      ldi f
 261: 41      x		;	[1:1] := f      // 12 cycles to here from (200)
-230: 7d f7   tml 377	;	call 377	// input stream id bit 10 cycles + 2 for call = 24 from (200)
+230: 7d f7   tml 377	;	call 377	// input stream id bit (read at cycle 7) 10 cycles + 2 for call = 24 cycles
 26c: 65      ska 1
 276: 6b      rm 3	;	[1:1].3 = A.0
 23b: 00      nop
@@ -470,7 +472,7 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 259: 42      xi		; [1:e] := 1
 22c: 35      ldi 5
 256: 41      x		; [1:f] := 5
-22b: 4c      rit        ;             70 + 71 cycles = 141 cycles from
+22b: 4c      rit        ;             70 + 71 cycles = 141 cycles from (200)
 
 
 
@@ -503,7 +505,7 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 
 
 			;; INPUT STREAM ID BIT
-			;  10 cycles
+			;  10 cycles, read input at cycle 7
 377: 20      lbli 0
 37b: 00      nop
 37d: 00      nop
