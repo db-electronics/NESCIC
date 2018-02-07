@@ -40,6 +40,9 @@ lockseed    equ	    0x20	; 0x20 seed calc and xfr, 0x21-0x2F seed area
 keyseed	    equ	    0x30	; 0x30 seed calc and xfr, 0x31-0x3F seed area
 xreg	    equ	    0x50
 eereg	    equ	    0x51
+	    
+dout	    equ	    0		; data out is bit0 of GPIO
+din	    equ	    1		; data in is bit1 of GPIO
 ;************************************************************************
 #include <p12f629.inc>
 ;************************************************************************
@@ -129,7 +132,7 @@ main
 	movlw	0x90		; global enable interrupts + enable external interrupt
 	movwf	INTCON
 	banksel	TRISIO
-	movlw	0x2D		; 5 = in, 4 = out, 3 = in, 2 = in, 1 = out, 0 = in
+	movlw	0b000101110	; 5 = in, 4 = out, 3 = in, 2 = in, 1 = in, 0 = out
 	movwf	TRISIO
 	movlw	0x24		; weak pull-up on 5 and 2
 	movwf	WPU
@@ -145,28 +148,28 @@ main
 	movlw	0x4		; wait = (3*W) + 5
 	call	wait		; burn 17 cycles
 	
-	btfsc	GPIO, 0		; check stream ID bit
+	btfsc	GPIO, din	; check stream ID bit
 	bsf	0x31, 3		; copy to lock seed
 	movlw	0x02		; wait=3*W+5
 	call	wait		; burn 11 cycles
 	nop
 	nop
 
-	btfsc	GPIO, 0		; check stream ID bit
+	btfsc	GPIO, din	; check stream ID bit
 	bsf	0x31, 0		; copy to lock seed
 	movlw	0x02		;
 	call	wait		; burn 11 cycles
 	nop
 	nop
 
-	btfsc	GPIO, 0		; check stream ID bit
+	btfsc	GPIO, din	; check stream ID bit
 	bsf	0x31, 1		; copy to lock seed
 	movlw	0x02		;
 	call	wait		; burn 11 cycles
 	nop
 	nop
 
-	btfsc	GPIO, 0		; check stream ID bit
+	btfsc	GPIO, din	; check stream ID bit
 	bsf	0x31, 2		; copy to lock seed
 
 ; 80 cycles to here
@@ -237,7 +240,7 @@ mainloop
 ;10f: 4c      rit
 				; 10 cycles for above
 				
-	movlw	0x20		; just set for key, no need to check for lock
+	movlw	lockseed	; just set for key, no need to check for lock
 	movwf	FSR		; 2 cycles
 				; ahead by 8 + 1 = 9 cycles
 	
@@ -246,7 +249,11 @@ mainloop
 ;068: a7      t 027		;	goto 027
 				; 3 cycles
 				; ahead by 9 + 3 cycles
-				
+	
+	movlw	0x2		; burn 12 cycles
+	call	wait		; 
+	nop
+	
 ;027: 30      ldi 0
 ;053: 41      x
 ;069: 46      out		; P0 := [1:0]
@@ -263,7 +270,14 @@ mainloop
 ;018: 61      skm 1
 ;04c: b3      t 033	// die
 ;066: ca      t 04a
-    
+	movlw	INDF		; x - partly
+	clrf	INDF		; ldi, 0
+	movwf	GPIO		; out
+	movfw	GPIO		; in
+	nop			; nop
+	bcf	GPIO, dout	; out0
+	movwf	INDF		; s
+	
     
 ;************************************************************************
 nextstreambit
