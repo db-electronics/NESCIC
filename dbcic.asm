@@ -1,4 +1,4 @@
-; ---------------------------------------------------------------------
+;************************************************************************
 ;   file dbcic.asm
 ;   author René Richard
 ;   brief
@@ -21,7 +21,7 @@
 ;   You should have received a copy of the GNU General Public License
 ;   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;
-; ---------------------------------------------------------------------
+;************************************************************************
 ;
 ;   pinout :  CIC
 ;
@@ -54,12 +54,80 @@
 ;   0x4d		buffer for eeprom access
 ;   0x4e		loop variable for longwait
 ;   0x4f		loop variable for wait
+    
 xreg	equ	0x42
-; ---------------------------------------------------------------------
+;************************************************************************
 #include <p12f629.inc>
-; -----------------------------------------------------------------------
+;************************************************************************
     __CONFIG _EC_OSC & _WDT_OFF & _PWRTE_OFF & _MCLRE_OFF & _CP_OFF & _CPD_OFF 
-; -----------------------------------------------------------------------
+;************************************************************************
+
+;************************************************************************
+; macros
+loadlock    macro L1,L2,L3,L4,L5,L6,L7,L8,L9,LA,LB,LC,LD,LE,LF
+	movlw	L1
+	movwf	0x21
+	movlw	L2
+	movwf	0x22
+	movlw	L3
+	movwf	0x23
+	movlw	L4
+	movwf	0x24
+	movlw	L5
+	movwf 	0x25
+	movlw	L6
+	movwf 	0x26
+	movlw	L7
+	movwf 	0x27
+	movlw	L8
+	movwf 	0x28
+	movlw	L9
+	movwf 	0x29
+	movlw	LA
+	movwf 	0x2A
+	movlw	LB
+	movwf 	0x2B
+	movlw	LC
+	movwf 	0x2C
+	movlw	LD
+	movwf 	0x2D
+	movlw	LE
+	movwf 	0x2E
+	movlw	LF
+	movwf 	0x2F
+endm
+
+loadkey	    macro K2,K3,K4,K5,K6,K7,K8,K9,KA,KB,KC,KD,KE,KF
+	movlw	K2
+	movwf	0x32
+	movlw	K3
+	movwf	0x33
+	movlw	K4
+	movwf	0x34
+	movlw	K5
+	movwf 	0x35
+	movlw	K6
+	movwf 	0x36
+	movlw	K7
+	movwf 	0x37
+	movlw	K8
+	movwf 	0x38
+	movlw	K9
+	movwf 	0x39
+	movlw	KA
+	movwf 	0x3A
+	movlw	KB
+	movwf 	0x3B
+	movlw	KC
+	movwf 	0x3C
+	movlw	KD
+	movwf 	0x3D
+	movlw	KE
+	movwf 	0x3E
+	movlw	KF
+	movwf 	0x3F
+endm
+;************************************************************************
 ; program start
 	org	0x0000
 	goto	main
@@ -77,7 +145,7 @@ main
 	movlw	0x90		; global enable interrupts + enable external interrupt
 	movwf	INTCON
 	banksel	TRISIO
-	movlw	0x2d		; 5 = in, 4 = out, 3 = in, 2 = in, 1 = out, 0 = in
+	movlw	0x2D		; 5 = in, 4 = out, 3 = in, 2 = in, 1 = out, 0 = in
 	movwf	TRISIO
 	movlw	0x24		; weak pull-up on 5 and 2
 	movwf	WPU
@@ -85,31 +153,31 @@ main
 	movwf	OPTION_REG
 	banksel GPIO
 
-;-- 16 cycles to here
-;-- lock sends stream ID. 15 cycles per bit--------
-;-- stream id read at 34, 49, 64 and 79
+; 16 cycles to here
+; lock sends stream ID. 15 cycles per bit--------
+; stream id read at 34, 49, 64 and 79
 	
-;-- burn 18 cycles
+; burn 18 cycles
 	movlw	0x4		; wait = (3*W) + 5
 	call	wait		; burn 17 cycles
 	
 	btfsc	GPIO, 0		; check stream ID bit
 	bsf	0x31, 3		; copy to lock seed
-	movlw	0x2		; wait=3*W+5
+	movlw	0x02		; wait=3*W+5
 	call	wait		; burn 11 cycles
 	nop
 	nop
 
 	btfsc	GPIO, 0		; check stream ID bit
 	bsf	0x31, 0		; copy to lock seed
-	movlw	0x2		;
+	movlw	0x02		;
 	call	wait		; burn 11 cycles
 	nop
 	nop
 
 	btfsc	GPIO, 0		; check stream ID bit
 	bsf	0x31, 1		; copy to lock seed
-	movlw	0x2		;
+	movlw	0x02		;
 	call	wait		; burn 11 cycles
 	nop
 	nop
@@ -117,17 +185,17 @@ main
 	btfsc	GPIO, 0		; check stream ID bit
 	bsf	0x31, 2		; copy to lock seed
 
-;-- 80 cycles to here
-;-- both seeds must be loaded within cycle 154
-;-- 154 - 80 = 74 cycles to load
-;-- curent region is stored in eeprom, load and call proper loading subroutine
+; 80 cycles to here
+; both seeds must be loaded within cycle 154
+; 154 - 80 = 74 cycles to load
+; curent region is stored in eeprom, load and call proper loading subroutine
 	banksel	EEADR		; 1
 	movlw	0x00		; 1 - point to region byte
 	movwf	EEADR		; 1
 	bsf	EECON1,RD	; 1 - read eeprom
 	movf	EEDATA,W	; 1 - region indicator in wreg
 
-;-- 85 cycles
+; 85 cycles
 ; 0x00 = 3193 - USA/Canada
 ; 0x01 = 3195 - Europe
 ; 0x02 = 3196 - Asia 
@@ -139,16 +207,16 @@ main
 	goto	load3196	; 2 + 60 - load Asia seeds
 	goto	load3197	; 2 + 60 - load UK/Italy/Australia seeds
 
-; -- 149 cycles, 5 cycles to burn
+; 149 cycles, 5 cycles to burn
 doneload
-	movlw	0x30
+	movlw	0x20		; lbmi 0 - load ahead from mainloop 054
 	movwf	FSR
 	nop
 	nop
 	nop
 
-; -----------------------------------------------------------------------
-;-- 154 cycles to main loop
+;************************************************************************
+; 154 cycles to main loop
 mainloop
 ;051: 31      ldi 1	; A := 1
 ;028: 5c      lxa	; X := A
@@ -159,10 +227,16 @@ mainloop
 	
 ;06a: 7c c7   tml 147	; call 147	// [H:0] := next stream bit
 	call	nextstreambit
-
-; -----------------------------------------------------------------------
+	
+;01a: 75      lbmi 1	; H := 1
+	bsf	FSR,4	    ; setting bit 4 changes 0x20 to 0x30
+;00d: 7c c7   tml 147	; call 147	// [H:0] := next stream bit	
+	call	nextstreambit
+	
+;************************************************************************
 nextstreambit
-;	[H:0] := NEXT STREAM BIT
+;	[H:0] := NEXT STREAM BIT - 10 cycles either pass
+;************************************************************************
 ;147: 5d      xax
 ;163: 5c      lxa
 ;171: 57      xal
@@ -192,12 +266,11 @@ nextstreambit
 nsbskip
 	movlw	0xF0		; lbli 0
 	andwf	FSR		; lbli 0
-	clrw			; ldi
-	movwf	INDF		; s
+	clrf	INDF		; ldi 0, s
 	return
+
 	
-;01a: 75      lbmi 1	; H := 1
-;00d: 7c c7   tml 147	; call 147	// [H:0] := next stream bit	
+;************************************************************************
 	
 loop	
 	movlw	0x1
@@ -657,73 +730,19 @@ supercic_pairmode_loop
 	bcf	GPIO, 4
 	goto	supercic_pairmode_loop
 
+	
 ; -----------------------------------------------------------------------
 ; 3193 - USA/Canada 
-; LOCK: 3952F20F9109997 
+; LOCK: 3952F20F9109997 - avrcic
+; LOCK: $1952f8271981115 - segher
 ; LOAD LOCK SEED (30 cycles)
 ; 30 + 28 + 2 for final goto = 60
 load3193
-	movlw	0x3
-	movwf	0x21
-	movlw	0x9
-	movwf	0x22
-	movlw	0x5
-	movwf	0x23
-	movlw	0x2
-	movwf	0x24
-	movlw	0xF
-	movwf 	0x25
-	movlw	0x2
-	movwf 	0x26
-	movlw	0x0
-	movwf 	0x27
-	movlw	0xF
-	movwf 	0x28
-	movlw	0x9
-	movwf 	0x29
-	movlw	0x1
-	movwf 	0x2A
-	movlw	0x0
-	movwf 	0x2B
-	movlw	0x9
-	movwf 	0x2C
-	movlw	0x9
-	movwf 	0x2D
-	movlw	0x9
-	movwf 	0x2E
-	movlw	0x7
-	movwf 	0x2F
-	
+	loadlock    0x1,0x9,0x5,0x2,0xF,0x8,0x2,0x7,0x1,0x9,0x8,0x1,0x1,0x1,0x5
 ; 3193 - USA/Canada 
-; KEY: x952129F910DF97 	
-	movlw	0x9
-	movwf	0x32
-	movlw	0x5
-	movwf	0x33
-	movlw	0x2
-	movwf	0x34
-	movlw	0xF
-	movwf 	0x35
-	movlw	0x2
-	movwf 	0x36
-	movlw	0x0
-	movwf 	0x37
-	movlw	0xF
-	movwf 	0x38
-	movlw	0x9
-	movwf 	0x39
-	movlw	0x1
-	movwf 	0x3A
-	movlw	0x0
-	movwf 	0x3B
-	movlw	0x9
-	movwf 	0x3C
-	movlw	0x9
-	movwf 	0x3D
-	movlw	0x9
-	movwf 	0x3E
-	movlw	0x7
-	movwf 	0x3F	
+; KEY: x952129F910DF97 - avrcic
+; KEY: $x95212171985715 - segher
+	loadkey	    0x9,0x5,0x2,0x1,0x2,0x1,0x7,0x1,0x9,0x8,0x5,0x7,0x1,0x5
 	goto	doneload
 
 ; -----------------------------------------------------------------------
@@ -732,67 +751,10 @@ load3193
 ; LOAD LOCK SEED (30 cycles)
 ; 30 + 28 + 2 for final goto = 60
 load3195
-	movlw	0x1
-	movwf	0x21
-	movlw	0x7
-	movwf	0x22
-	movlw	0xB
-	movwf	0x23
-	movlw	0xE
-	movwf	0x24
-	movlw	0xF
-	movwf 	0x25
-	movlw	0x0
-	movwf 	0x26
-	movlw	0xA
-	movwf 	0x27
-	movlw	0xF
-	movwf 	0x28
-	movlw	0x5
-	movwf 	0x29
-	movlw	0x7
-	movwf 	0x2A
-	movlw	0x0
-	movwf 	0x2B
-	movlw	0x6
-	movwf 	0x2C
-	movlw	0x6
-	movwf 	0x2D
-	movlw	0x1
-	movwf 	0x2E
-	movlw	0x7
-	movwf 	0x2F
-	
+	loadlock    0x1,0x7,0xB,0xE,0xF,0x0,0xA,0xF,0x5,0x7,0x0,0x6,0x6,0x1,0x7
 ; 3195 - Europe 
 ; KEY: $x7BD309F6EF2F97 
-	movlw	0x7
-	movwf	0x32
-	movlw	0xB
-	movwf	0x33
-	movlw	0xD
-	movwf	0x34
-	movlw	0x3
-	movwf 	0x35
-	movlw	0x0
-	movwf 	0x36
-	movlw	0x9
-	movwf 	0x37
-	movlw	0xF
-	movwf 	0x38
-	movlw	0x6
-	movwf 	0x39
-	movlw	0xE
-	movwf 	0x3A
-	movlw	0xF
-	movwf 	0x3B
-	movlw	0x2
-	movwf 	0x3C
-	movlw	0xF
-	movwf 	0x3D
-	movlw	0x9
-	movwf 	0x3E
-	movlw	0x7
-	movwf 	0x3F	
+	loadkey	    0x7,0xB,0xD,0x3,0x0,0x9,0xF,0x6,0xE,0xF,0x2,0xF,0x9,0x7	
 	goto	doneload
 
 ; -----------------------------------------------------------------------
@@ -801,67 +763,10 @@ load3195
 ; LOAD LOCK SEED (30 cycles)
 ; 30 + 28 + 2 for final goto = 60
 load3196
-	movlw	0x0
-	movwf	0x21
-	movlw	0x6
-	movwf	0x22
-	movlw	0xA
-	movwf	0x23
-	movlw	0xD
-	movwf	0x24
-	movlw	0x7
-	movwf 	0x25
-	movlw	0x0
-	movwf 	0x26
-	movlw	0xA
-	movwf 	0x27
-	movlw	0xF
-	movwf 	0x28
-	movlw	0x6
-	movwf 	0x29
-	movlw	0xE
-	movwf 	0x2A
-	movlw	0xF
-	movwf 	0x2B
-	movlw	0x6
-	movwf 	0x2C
-	movlw	0x6
-	movwf 	0x2D
-	movlw	0x6
-	movwf 	0x2E
-	movlw	0xC
-	movwf 	0x2F
-	
+	loadlock    0x0,0x6,0xA,0xD,0x7,0x0,0xA,0xF,0x6,0xE,0xF,0x6,0x6,0x6,0xC
 ; 3196 - Asia
 ; KEY: x6ADCF606EF2F97 
-	movlw	0x6
-	movwf	0x32
-	movlw	0xA
-	movwf	0x33
-	movlw	0xD
-	movwf	0x34
-	movlw	0xC
-	movwf 	0x35
-	movlw	0xF
-	movwf 	0x36
-	movlw	0x6
-	movwf 	0x37
-	movlw	0x0
-	movwf 	0x38
-	movlw	0x6
-	movwf 	0x39
-	movlw	0xE
-	movwf 	0x3A
-	movlw	0xF
-	movwf 	0x3B
-	movlw	0x2
-	movwf 	0x3C
-	movlw	0xF
-	movwf 	0x3D
-	movlw	0x9
-	movwf 	0x3E
-	movlw	0x7
-	movwf 	0x3F	
+	loadkey	    0x6,0xA,0xD,0xC,0xF,0x6,0x0,0x6,0xE,0xF,0x2,0xF,0x9,0x7	
 	goto	doneload
 	
 ; -----------------------------------------------------------------------
@@ -870,67 +775,10 @@ load3196
 ; LOAD LOCK SEED (30 cycles)
 ; 30 + 28 + 2 for final goto = 60
 load3197
-	movlw	0x5
-	movwf	0x21
-	movlw	0x5
-	movwf	0x22
-	movlw	0x8
-	movwf	0x23
-	movlw	0x9
-	movwf	0x24
-	movlw	0x3
-	movwf 	0x25
-	movlw	0x7
-	movwf 	0x26
-	movlw	0xA
-	movwf 	0x27
-	movlw	0x0
-	movwf 	0x28
-	movlw	0x0
-	movwf 	0x29
-	movlw	0xE
-	movwf 	0x2A
-	movlw	0x0
-	movwf 	0x2B
-	movlw	0xD
-	movwf 	0x2C
-	movlw	0x6
-	movwf 	0x2D
-	movlw	0x6
-	movwf 	0x2E
-	movlw	0xD
-	movwf 	0x2F
-	
+	loadlock    0x5,0x5,0x8,0x9,0x3,0x7,0xA,0x0,0x0,0xE,0x0,0xD,0x6,0x6,0xD
 ; 3197 - UK/Italy/Australia
 ; KEY: x79AA1E0D019D99 
-	movlw	0x7
-	movwf	0x32
-	movlw	0x9
-	movwf	0x33
-	movlw	0xA
-	movwf	0x34
-	movlw	0xA
-	movwf 	0x35
-	movlw	0x1
-	movwf 	0x36
-	movlw	0xE
-	movwf 	0x37
-	movlw	0x0
-	movwf 	0x38
-	movlw	0xD
-	movwf 	0x39
-	movlw	0x0
-	movwf 	0x3A
-	movlw	0x1
-	movwf 	0x3B
-	movlw	0x9
-	movwf 	0x3C
-	movlw	0xD
-	movwf 	0x3D
-	movlw	0x9
-	movwf 	0x3E
-	movlw	0x9
-	movwf 	0x3F	
+	loadkey	    0x7,0x9,0xA,0xA,0x1,0xE,0x0,0xD,0x0,0x1,0x9,0xD,0x9,0x9	
 	goto	doneload
 	
 ;-- change region in eeprom and die
@@ -940,7 +788,7 @@ load3197
 ; 0x03 = 3197 - UK/Italy/Australia
 die
 	banksel	EEADR
-	movlw	0x0F		; point to region
+	movlw	0x00		; point to region
 	movwf	EEADR		; store to address
 	bsf	EECON1,RD	; read eeprom
 	movf	EEDATA,W	; move to wreg
