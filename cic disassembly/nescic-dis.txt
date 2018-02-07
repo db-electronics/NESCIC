@@ -257,7 +257,7 @@
 
 
 
-			;; H := "OTHER SIDE"
+			;; H := "OTHER SIDE" - 10 cycles
 174: 74      lbmi 0	; H := 0
 17a: 7c 83   tml 103	; skip if lock:
 11e: 75      lbmi 1	;	H := 1

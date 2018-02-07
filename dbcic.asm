@@ -32,30 +32,14 @@
 ;                GP |4 GP3     GP2 5| CIC slave reset [7]
 ;                   `-------'-------
 ;
-;
-;   Status out can be connected to a LED. It indicates:
-;
-;   state                   | output
-;  -------------------------+----------------------------
-;   OK or no lock CIC       | high
-;   error                   | low
-;
-;   In case lockout fails, the region is switched automatically and
-;   will be used after the next reset.
-;
-;   memory usage:
-;
-;   0x20		buffer for seed calc and transfer
-;   0x21 - 0x2f		seed area (lock seed)
-;   0x30		buffer for seed calc
-;   0x31 - 0x3f		seed area (key seed; 0x31 filled in by lock)
-;   0x40 - 0x41		buffer for seed calc
-;   0x42		X register
 ;   0x4d		buffer for eeprom access
 ;   0x4e		loop variable for longwait
 ;   0x4f		loop variable for wait
-    
-xreg	equ	0x42
+
+lockseed    equ	    0x20	; 0x20 seed calc and xfr, 0x21-0x2F seed area
+keyseed	    equ	    0x30	; 0x30 seed calc and xfr, 0x31-0x3F seed area
+xreg	    equ	    0x50
+eereg	    equ	    0x51
 ;************************************************************************
 #include <p12f629.inc>
 ;************************************************************************
@@ -66,66 +50,66 @@ xreg	equ	0x42
 ; macros
 loadlock    macro L1,L2,L3,L4,L5,L6,L7,L8,L9,LA,LB,LC,LD,LE,LF
 	movlw	L1
-	movwf	0x21
+	movwf	lockseed+0x1
 	movlw	L2
-	movwf	0x22
+	movwf	lockseed+0x2
 	movlw	L3
-	movwf	0x23
+	movwf	lockseed+0x3
 	movlw	L4
-	movwf	0x24
+	movwf	lockseed+0x4
 	movlw	L5
-	movwf 	0x25
+	movwf 	lockseed+0x5
 	movlw	L6
-	movwf 	0x26
+	movwf 	lockseed+0x6
 	movlw	L7
-	movwf 	0x27
+	movwf 	lockseed+0x7
 	movlw	L8
-	movwf 	0x28
+	movwf 	lockseed+0x8
 	movlw	L9
-	movwf 	0x29
+	movwf 	lockseed+0x9
 	movlw	LA
-	movwf 	0x2A
+	movwf 	lockseed+0xA
 	movlw	LB
-	movwf 	0x2B
+	movwf 	lockseed+0xB
 	movlw	LC
-	movwf 	0x2C
+	movwf 	lockseed+0xC
 	movlw	LD
-	movwf 	0x2D
+	movwf 	lockseed+0xD
 	movlw	LE
-	movwf 	0x2E
+	movwf 	lockseed+0xE
 	movlw	LF
-	movwf 	0x2F
+	movwf 	lockseed+0xF
 endm
 
 loadkey	    macro K2,K3,K4,K5,K6,K7,K8,K9,KA,KB,KC,KD,KE,KF
 	movlw	K2
-	movwf	0x32
+	movwf	keyseed+0x2
 	movlw	K3
-	movwf	0x33
+	movwf	keyseed+0x3
 	movlw	K4
-	movwf	0x34
+	movwf	keyseed+0x4
 	movlw	K5
-	movwf 	0x35
+	movwf 	keyseed+0x5
 	movlw	K6
-	movwf 	0x36
+	movwf 	keyseed+0x6
 	movlw	K7
-	movwf 	0x37
+	movwf 	keyseed+0x7
 	movlw	K8
-	movwf 	0x38
+	movwf 	keyseed+0x8
 	movlw	K9
-	movwf 	0x39
+	movwf 	keyseed+0x9
 	movlw	KA
-	movwf 	0x3A
+	movwf 	keyseed+0xA
 	movlw	KB
-	movwf 	0x3B
+	movwf 	keyseed+0xB
 	movlw	KC
-	movwf 	0x3C
+	movwf 	keyseed+0xC
 	movlw	KD
-	movwf 	0x3D
+	movwf 	keyseed+0xD
 	movlw	KE
-	movwf 	0x3E
+	movwf 	keyseed+0xE
 	movlw	KF
-	movwf 	0x3F
+	movwf 	keyseed+0xF
 endm
 ;************************************************************************
 ; program start
@@ -192,8 +176,8 @@ main
 	banksel	EEADR		; 1
 	movlw	0x00		; 1 - point to region byte
 	movwf	EEADR		; 1
-	bsf	EECON1,RD	; 1 - read eeprom
-	movf	EEDATA,W	; 1 - region indicator in wreg
+	bsf	EECON1, RD	; 1 - read eeprom
+	movf	EEDATA, W	; 1 - region indicator in wreg
 
 ; 85 cycles
 ; 0x00 = 3193 - USA/Canada
@@ -201,7 +185,7 @@ main
 ; 0x02 = 3196 - Asia 
 ; 0x03 = 3197 - UK/Italy/Australia
 	
-	addwf	PCL,f		; 2 - computed goto for proper lock/key load
+	addwf	PCL, f		; 2 - computed goto for proper lock/key load
 	goto	load3193	; 2 + 60 - load USA/Canada seeds
 	goto	load3195	; 2 + 60 - load Europe seeds
 	goto	load3196	; 2 + 60 - load Asia seeds
@@ -218,21 +202,69 @@ doneload
 ;************************************************************************
 ; 154 cycles to main loop
 mainloop
-;051: 31      ldi 1	; A := 1
-;028: 5c      lxa	; X := A
-;054: 74      lbmi 0	; H := 0
+;051: 31      ldi 1		; A := 1
+;028: 5c      lxa		; X := A
+;054: 74      lbmi 0		; H := 0
 	movlw	0x01		; ldi 1
 	movwf	xreg		; lxa - load x with a
 				; ahead by 1 cycle here
 	
-;06a: 7c c7   tml 147	; call 147	// [H:0] := next stream bit
-	call	nextstreambit
+;06a: 7c c7   tml 147		; call 147	// [H:0] := next stream bit
+				; tml 147 = 10 cycles + 2 for call
+	call	nextstreambit	; 10 cycles + 2 for call
+				; ahead by 1 cycle here
 	
-;01a: 75      lbmi 1	; H := 1
-	bsf	FSR,4	    ; setting bit 4 changes 0x20 to 0x30
-;00d: 7c c7   tml 147	; call 147	// [H:0] := next stream bit	
-	call	nextstreambit
+;01a: 75      lbmi 1		; H := 1
+	bsf	FSR, 4		; setting bit 4 changes 0x20 to 0x30
+;00d: 7c c7   tml 147		; call 147	// [H:0] := next stream bit
+				; tml 147 = 10 cycles + 2 for call
+	call	nextstreambit	; 10 cycles + 2 for call
+				; ahead by 1 cycle here
+
+;003: 7c f4   tml 174		; H := "other side"
+				; other side 
+;		;; H := "OTHER SIDE" - 10 cycles
+;174: 74      lbmi 0		; H := 0
+;17a: 7c 83   tml 103		; skip if lock:
+		;; SKIP NEXT INSTRUCTION IF LOCK
+;103: 20      lbli 0		; L := 0
+;141: 55      in		; A := P0
+;120: 67      ska 3		; if P0.0 = 0	// if key
+;150: 8f      t 10f		;	return
+;				; else
+;168: 4d      ritsk		;	return and skip
+;11e: 75      lbmi 1		;	H := 1
+;10f: 4c      rit
+				; 10 cycles for above
+				
+	movlw	0x20		; just set for key, no need to check for lock
+	movwf	FSR		; 2 cycles
+				; ahead by 8 + 1 = 9 cycles
 	
+;020: 55      in		; A := P0
+;050: 67      ska 3		; if A.3 = 0	// if key
+;068: a7      t 027		;	goto 027
+				; 3 cycles
+				; ahead by 9 + 3 cycles
+				
+;027: 30      ldi 0
+;053: 41      x
+;069: 46      out		; P0 := [1:0]
+;034: 55      in		; A := P0
+;05a: 00      nop
+;02d: 47      out0		; P0 := 0
+;016: 4a      s			; [1:0] := A
+;00b: 75      lbmi 1
+;045: 7c 83   tml 103
+;011: 74      lbmi 0		; H := 0
+;008: 60      skm 0
+;044: 93      t 013
+;062: 7c f4   tml 174		; H := 1
+;018: 61      skm 1
+;04c: b3      t 033	// die
+;066: ca      t 04a
+    
+    
 ;************************************************************************
 nextstreambit
 ;	[H:0] := NEXT STREAM BIT - 10 cycles either pass
