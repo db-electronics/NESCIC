@@ -26,23 +26,25 @@
 ;   pinout :  CIC
 ;
 ;                   ,-------_-------.
-;      +5V     [16] |1 Vdd     GND 8| GND [8]
-;      CIC clk [6]  |2 GP5     GPO 7| CIC data out 0 [2]
-;        status out |3 GP4     GP1 6| CIC data in  1 [1]
-;                GP |4 GP3     GP2 5| CIC slave reset [7]
+;      +5V          |1 Vdd     GND 8| GND
+;      CIC clk [71] |2 GP5     GPO 7| CIC data out    [35]
+;        status out |3 GP4     GP1 6| CIC data in     [34]
+;                   |4 GP3     GP2 5| CIC slave reset [70]
 ;                   `-------'-------
 ;
-;   0x4d		buffer for eeprom access
-;   0x4e		loop variable for longwait
-;   0x4f		loop variable for wait
+
 
 lockseed    equ	    0x20	; 0x20 seed calc and xfr, 0x21-0x2F seed area
 keyseed	    equ	    0x30	; 0x30 seed calc and xfr, 0x31-0x3F seed area
 xreg	    equ	    0x50
 eereg	    equ	    0x51
+swait	    equ	    0x52
+lwait	    equ	    0x53
 	    
 dout	    equ	    0		; data out is bit0 of GPIO
 din	    equ	    1		; data in is bit1 of GPIO
+led	    equ	    4
+	    
 ;************************************************************************
 #include <p12f629.inc>
 ;************************************************************************
@@ -114,6 +116,19 @@ loadkey	    macro K2,K3,K4,K5,K6,K7,K8,K9,KA,KB,KC,KD,KE,KF
 	movlw	KF
 	movwf 	keyseed+0xF
 endm
+
+; the code treats the FSR as the BM:BL register
+; seed memory starts at 0x20, therefore, 
+	; clearing bit4 = lbmi 0
+	; setting bit4 = lbmi 1
+lbmi_0	macro
+	bcf	FSR, 4	    
+endm    
+	
+lbmi_1	macro
+	bsf	FSR, 4
+endm
+	
 ;************************************************************************
 ; program start
 	org	0x0000
@@ -140,14 +155,16 @@ main
 	movwf	OPTION_REG
 	banksel GPIO
 
-; 16 cycles to here
+; 16 from POR to cycles to here
+; timing critical section here,
 ; lock sends stream ID. 15 cycles per bit--------
-; stream id read at 34, 49, 64 and 79
+; stream id read at 34th, 49th, 64th and 79th cycles
 	
 ; burn 18 cycles
 	movlw	0x4		; wait = (3*W) + 5
 	call	wait		; burn 17 cycles
-	
+
+
 	btfsc	GPIO, din	; check stream ID bit
 	bsf	0x31, 3		; copy to lock seed
 	movlw	0x02		; wait=3*W+5
@@ -196,7 +213,7 @@ main
 
 ; 149 cycles, 5 cycles to burn
 doneload
-	movlw	0x20		; lbmi 0 - load ahead from mainloop 054
+	movlw	lockseed	; lbmi 0 - load ahead from mainloop 054
 	movwf	FSR
 	nop
 	nop
@@ -211,74 +228,93 @@ mainloop
 	movlw	0x01		; ldi 1
 	movwf	xreg		; lxa - load x with a
 				; ahead by 1 cycle here
-	
+				; ** 156
+				
 ;06a: 7c c7   tml 147		; call 147	// [H:0] := next stream bit
 				; tml 147 = 10 cycles + 2 for call
 	call	nextstreambit	; 10 cycles + 2 for call
 				; ahead by 1 cycle here
+				; ** 168
 	
 ;01a: 75      lbmi 1		; H := 1
-	bsf	FSR, 4		; setting bit 4 changes 0x20 to 0x30
+	lbmi_1			; setting bit 4 changes 0x20 to 0x30
 ;00d: 7c c7   tml 147		; call 147	// [H:0] := next stream bit
 				; tml 147 = 10 cycles + 2 for call
 	call	nextstreambit	; 10 cycles + 2 for call
 				; ahead by 1 cycle here
+				; ** 181
 
-;003: 7c f4   tml 174		; H := "other side"
-				; other side 
-;		;; H := "OTHER SIDE" - 10 cycles
-;174: 74      lbmi 0		; H := 0
-;17a: 7c 83   tml 103		; skip if lock:
-		;; SKIP NEXT INSTRUCTION IF LOCK
-;103: 20      lbli 0		; L := 0
-;141: 55      in		; A := P0
-;120: 67      ska 3		; if P0.0 = 0	// if key
-;150: 8f      t 10f		;	return
-;				; else
-;168: 4d      ritsk		;	return and skip
-;11e: 75      lbmi 1		;	H := 1
-;10f: 4c      rit
-				; 10 cycles for above
+;003: 7c f4   tml 174		; H := 0 in key mode, 8 cycles	+ 2 for call
+	lbmi_0			; FSR = lockseed, no need to check for lock
+				; ahead by 8 + 2 = 10 cycles
+				; ** 182
 				
-	movlw	lockseed	; just set for key, no need to check for lock
-	movwf	FSR		; 2 cycles
-				; ahead by 8 + 1 = 9 cycles
-	
 ;020: 55      in		; A := P0
 ;050: 67      ska 3		; if A.3 = 0	// if key
 ;068: a7      t 027		;	goto 027
 				; 3 cycles
-				; ahead by 9 + 3 cycles
+				; ahead by 10 + 3 cycles
 	
-	movlw	0x2		; burn 12 cycles
+	movlw	0x2		; burn 13 cycles
 	call	wait		; 
 	nop
+	nop
+				; ** 195
+			    ; in sync
 	
 ;027: 30      ldi 0
 ;053: 41      x
+	movlw	INDF		; x - partly
+	clrf	INDF		; ldi, 0
+				; ** 197
+			    ; in sync
+				
 ;069: 46      out		; P0 := [1:0]
 ;034: 55      in		; A := P0
 ;05a: 00      nop
 ;02d: 47      out0		; P0 := 0
-;016: 4a      s			; [1:0] := A
-;00b: 75      lbmi 1
-;045: 7c 83   tml 103
-;011: 74      lbmi 0		; H := 0
-;008: 60      skm 0
-;044: 93      t 013
-;062: 7c f4   tml 174		; H := 1
-;018: 61      skm 1
-;04c: b3      t 033	// die
-;066: ca      t 04a
-	movlw	INDF		; x - partly
-	clrf	INDF		; ldi, 0
 	movwf	GPIO		; out
+				; ** 198 GetDin() - tengenc says 195
 	movfw	GPIO		; in
 	nop			; nop
 	bcf	GPIO, dout	; out0
+				; ** 201
+			    ; in sync
+				
+;016: 4a      s			; [1:0] := A
 	movwf	INDF		; s
+			    ; in sync
+
+;00b: 75      lbmi 1		; 1
+	lbmi_1
+;045: 7c 83   tml 103		; 7 skip next instruction if lock, 5 cycles + 2 for call
+;011: 74      lbmi 0		; 1 H := 0 - we are key so don't skip
+			    ; 8 cycles ahead
+			    
+;008: 60      skm 0
+	btfss	INDF, 0		; skm 0 
+			    ; 8 cycles ahead
+;044: 93      t 013
+	goto	die		; 2 cycles
+			    ; 8 cycles ahead without skip
+			    
+;062: 7c f4   tml 174		; H := 0 in key mode, 8 cycles	+ 2 for call
+	lbmi_0			; 1- FSR = lockseed, no need to check for lock
+			    ; 15 cycles ahead
+;018: 61      skm 1
+	btfss	INDF, 1		; skm 1
+;04c: b3      t 033		// die
+	goto	die
+			    ; 15 cycles ahead
+			    
+	movlw	0x3		; burn 15 cycles
+	call	wait		; 
+	nop
+;066: ca      t 04a		
+			    
 	
-    
+finished
+	goto	finished
 ;************************************************************************
 nextstreambit
 ;	[H:0] := NEXT STREAM BIT - 10 cycles either pass
@@ -720,25 +756,6 @@ mangle_lock_withskip
 	addlw	0xf
 	movwf	0x30
 
-	btfss	0x5e, 1
-	goto	scic_pair_skip1
-	btfsc	0x5f, 1
-	goto	scic_pair_skip2
-	btfsc	GPIO, 3
-	goto	scic_pair_skip3
-	goto	supercic_pairmode
-scic_pair_skip1
-	nop
-	nop
-scic_pair_skip2
-	nop
-	nop
-scic_pair_skip3	
-	nop
-	nop
-	nop
-	nop
-
 	btfss	0x30, 4 ; skip if half-byte carry
 	goto mangle_return
 	nop
@@ -748,33 +765,20 @@ scic_pair_skip3
 
 ; --------wait: 3*(W-1)+7 cycles (including call+return). W=0 -> 256!--------
 wait			    ; 2 for call
-	movwf	0x4f	    ; 1
-wait0	decfsz	0x4f, f	    ; 1 / 2 last pass
+	movwf	swait	    ; 1
+wait0	decfsz	swait, f    ; 1 / 2 last pass
 	goto	wait0	    ; 2
 	return		    ; 2
 
 ; --------wait long: 8+(3*(w-1))+(772*w). W=0 -> 256!--------
 longwait
-	movwf	0x4e
+	movwf	lwait
 	clrw
 longwait0
 	call	wait
-	decfsz	0x4e, f
+	decfsz	lwait, f
 	goto	longwait0
 	return
-
-; -----------------------------------------------------------------------
-supercic_pairmode
-	banksel	TRISIO
-	bsf	TRISIO, 0
-	bsf	TRISIO, 1
-	banksel	GPIO
-supercic_pairmode_loop
-	bsf	GPIO, 4
-	nop
-	nop
-	bcf	GPIO, 4
-	goto	supercic_pairmode_loop
 
 	
 ; -----------------------------------------------------------------------
@@ -838,11 +842,11 @@ die
 	movwf	EEADR		; store to address
 	bsf	EECON1,RD	; read eeprom
 	movf	EEDATA,W	; move to wreg
-	movwf   0x4D		; store in 4D
-	incf	0x4D,f		; increment
-	btfsc	0x4D, 2		; check if region is greater than 3
-	clrf	0x4D		; wrap around back to 0
-	movf	0x4D,W		; store region in wreg
+	movwf   eereg		; store in 4D
+	incf	eereg,f		; increment
+	btfsc	eereg, 2	; check if region is greater than 3
+	clrf	eereg		; wrap around back to 0
+	movf	eereg,W		; store region in wreg
 	movwf	EEDATA		; store back to eeprom
 	bsf	EECON1, WREN
 	bcf	INTCON, GIE
@@ -856,10 +860,10 @@ die
 	banksel	GPIO
 ; --------get caught up--------
 die_trap
-	bsf	GPIO, 4		; LED on
+	bsf	GPIO, led	; LED on
 	nop
 	nop
-	bcf	GPIO, 4		; LED on
+	bcf	GPIO, led	; LED on
 	goto	die_trap
 	
 ; eeprom memory

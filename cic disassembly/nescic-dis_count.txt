@@ -86,28 +86,28 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 
 
 			;; MAIN LOOP
-051: 31      ldi 1	; A := 1
+051: 31      ldi 1	; A := 1 			// 155
 
-028: 5c      lxa	; X := A
+028: 5c      lxa	; X := A			// 156
 
-054: 74      lbmi 0	; H := 0
-06a: 7c c7   tml 147	; call 147	// [H:0] := next stream bit
+054: 74      lbmi 0	; H := 0			// 157
+06a: 7c c7   tml 147	; call 147			// [H:0] := next stream bit - 10 cycles + 2 for call // 169
+		
+01a: 75      lbmi 1	; H := 1			// 170
+00d: 7c c7   tml 147	; call 147			// [H:0] := next stream bit - 10 cycles + 2 for call // 182	
 
-01a: 75      lbmi 1	; H := 1
-00d: 7c c7   tml 147	; call 147	// [H:0] := next stream bit
+003: 7c f4   tml 174	; H := "other side" 		// 8 cycles + 2 for call // 192
+020: 55      in		; A := P0	    		// 193
+050: 67      ska 3	; if A.3 = 0	// if key	// 194
+068: a7      t 027	;	goto 027		// 195
 
-003: 7c f4   tml 174	; H := "other side"
-020: 55      in		; A := P0
-050: 67      ska 3	; if A.3 = 0	// if key
-068: a7      t 027	;	goto 027
-
-074: 30      ldi 0
-07a: 41      x
-03d: 46      out	; P0 := [0:0]
-01e: 00      nop
-00f: 55      in		; A := P0
-047: 47      out0	; P0 := 0
-063: 4a      s		; [0:0] := A
+074: 30      ldi 0					// 196
+07a: 41      x						// 197
+03d: 46      out	; P0 := [0:0]			// 198 ** key and lock both output here
+01e: 00      nop					// 199 ** key reads here
+00f: 55      in		; A := P0			// 200 ** key is nop here, to permit read
+047: 47      out0	; P0 := 0			// 201
+063: 4a      s		; [0:0] := A			// 202
 071: 75      lbmi 1
 038: 7c 83   tml 103
 06e: 74      lbmi 0
@@ -150,18 +150,18 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 
 
 			;;
-027: 30      ldi 0
-053: 41      x
-069: 46      out	; P0 := [1:0]
-034: 55      in		; A := P0
-05a: 00      nop
-02d: 47      out0	; P0 := 0
-016: 4a      s		; [1:0] := A
-00b: 75      lbmi 1
-045: 7c 83   tml 103
-011: 74      lbmi 0	; H := 0
-008: 60      skm 0
-044: 93      t 013
+027: 30      ldi 0				// 196
+053: 41      x					// 197
+069: 46      out	; P0 := [1:0]		// 198 ** key and lock both output here
+034: 55      in		; A := P0		// 199 ** lock is nop here, to permit read
+05a: 00      nop				// 200 ** lock reads here
+02d: 47      out0	; P0 := 0		// 201
+016: 4a      s		; [1:0] := A		// 202
+00b: 75      lbmi 1				// 203
+045: 7c 83   tml 103				// 5 cycles + 2 for call // 210 (tml 103 skip next if lock, BL = 0)
+011: 74      lbmi 0	; H := 0		// 211
+008: 60      skm 0				// 212
+044: 93      t 013				// 213
 062: 7c f4   tml 174	; H := 1
 018: 61      skm 1
 04c: b3      t 033	// die
@@ -263,18 +263,21 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 
 
 
-			;; SKIP NEXT INSTRUCTION IF LOCK 
+			;; SKIP NEXT INSTRUCTION IF LOCK, set L = 0
 			;  5 cycles when key
 103: 20      lbli 0	; L := 0
 141: 55      in		; A := P0
-120: 67      ska 3	; if P0.0 = 0	// if key
+120: 67      ska 3	; if P0.3 = 0	// if key
 150: 8f      t 10f	;	return
 			; else
 168: 4d      ritsk	;	return and skip
+			;; SOME CALLS COME DIRECTLY HERE
+			;; tml 174, in key mode, sets H = 0
 			;; H := "OTHER SIDE"
+			;  8 cycles when key
 174: 74      lbmi 0	; H := 0
-17a: 7c 83   tml 103	; skip if lock:
-11e: 75      lbmi 1	;	H := 1
+17a: 7c 83   tml 103	; skip if lock: ; 5 cycles + 2 for call
+11e: 75      lbmi 1	; H := 1
 10f: 4c      rit
 
 
@@ -357,7 +360,7 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 
 
 
-			;; INIT STREAM
+			;; INIT STREAM + 13 cycles from POR
 200: 7c 83   tml 103    ; 5 cycles when key + 2 for call
 260: 8e      t 20e	; if lock {
 270: 75      lbmi 1
@@ -384,20 +387,20 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 20e: 75      lbmi 1	;	H := 1
 207: 21      lbli 1	;	L := 1
 243: 3f      ldi f
-261: 41      x		;	[1:1] := f      // 12 cycles to here from (200)
-230: 7d f7   tml 377	;	call 377	// input stream id bit 10 cycles + 2 for call = 24 from (200)
+261: 41      x		;	[1:1] := f      // 12 cycles to here from (200), + 13 from POR
+230: 7d f7   tml 377	;	call 377	// input stream id bit 10 cycles + 2 for call = 24 from (200) - input occurs at 9th cycle from here (12 + 9 = 21)
 26c: 65      ska 1
 276: 6b      rm 3	;	[1:1].3 = A.0
-23b: 00      nop
-25d: 7d f7   tml 377	;	call 377	// input stream id bit = 39 cycles
+23b: 00      nop				// 27
+25d: 7d f7   tml 377	;	call 377	// input stream id bit = 39 cycles - input at (27 + 9 = 36)
 217: 65      ska 1
 24b: 68      rm 0	;	[1:1].0 = A.0
-265: 00      nop
-232: 7d f7   tml 377	;	call 377	// input stream id bit = 54 cycles
+265: 00      nop				// 42
+232: 7d f7   tml 377	;	call 377	// input stream id bit = 54 cycles - input at (42 + 9 = 51)
 20c: 65      ska 1
 246: 69      rm 1	;	[1:1].1 = A.0
-223: 00      nop
-251: 7d f7   tml 377	;	call 377	// input stream id bit = 69 cycles
+223: 00      nop				// 57
+251: 7d f7   tml 377	;	call 377	// input stream id bit = 69 cycles - input at (57 + 9 = 66)
 254: 65      ska 1
 26a: 6a      rm 2	;	[1:1].2 = A.0
 			; }                     // 71 cycles
@@ -471,7 +474,7 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 259: 42      xi		; [1:e] := 1
 22c: 35      ldi 5
 256: 41      x		; [1:f] := 5
-22b: 4c      rit        ;             70 + 71 cycles = 141 cycles from
+22b: 4c      rit        ;             70 + 71 cycles = 141 cycles from (200), + 13 from POR
 
 
 
