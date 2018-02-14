@@ -121,11 +121,11 @@ endm
 ; seed memory starts at 0x20, therefore, 
 	; clearing bit4 = lbmi 0
 	; setting bit4 = lbmi 1
-lbmi_0	macro
+lbmi_0	macro		; lockseed at 0x20
 	bcf	FSR, 4	    
 endm    
 	
-lbmi_1	macro
+lbmi_1	macro		; keyseed at 0x30
 	bsf	FSR, 4
 endm
 	
@@ -228,13 +228,13 @@ mainloop
 	movlw	0x01		; ldi 1
 	movwf	xreg		; lxa - load x with a
 				; ahead by 1 cycle here
-				; ** 156
+			    ; ** 156
 				
 ;06a: 7c c7   tml 147		; call 147	// [H:0] := next stream bit
 				; tml 147 = 10 cycles + 2 for call
 	call	nextstreambit	; 10 cycles + 2 for call
 				; ahead by 1 cycle here
-				; ** 168
+			    ; ** 168
 	
 ;01a: 75      lbmi 1		; H := 1
 	lbmi_1			; setting bit 4 changes 0x20 to 0x30
@@ -242,12 +242,12 @@ mainloop
 				; tml 147 = 10 cycles + 2 for call
 	call	nextstreambit	; 10 cycles + 2 for call
 				; ahead by 1 cycle here
-				; ** 181
+			    ; ** 181
 
 ;003: 7c f4   tml 174		; H := 0 in key mode, 8 cycles	+ 2 for call
 	lbmi_0			; FSR = lockseed, no need to check for lock
 				; ahead by 8 + 2 = 10 cycles
-				; ** 182
+			    ; ** 182
 				
 ;020: 55      in		; A := P0
 ;050: 67      ska 3		; if A.3 = 0	// if key
@@ -259,14 +259,14 @@ mainloop
 	call	wait		; 
 	nop
 	nop
-				; ** 195
+			    ; ** 195
 			    ; in sync
 	
 ;027: 30      ldi 0
 ;053: 41      x
 	movlw	INDF		; x - partly
 	clrf	INDF		; ldi, 0
-				; ** 197
+			    ; ** 197
 			    ; in sync
 				
 ;069: 46      out		; P0 := [1:0]
@@ -274,33 +274,35 @@ mainloop
 ;05a: 00      nop
 ;02d: 47      out0		; P0 := 0
 	movwf	GPIO		; out
-				; ** 198 GetDin() - tengenc says 195
-	movfw	GPIO		; in
+			    ; ** 198 
+	movfw	GPIO		; in - GetDin() - tengenc says 195
 	nop			; nop
 	bcf	GPIO, dout	; out0
-				; ** 201
+			    ; ** 201
 			    ; in sync
 				
 ;016: 4a      s			; [1:0] := A
 	movwf	INDF		; s
+			    ; ** 202
 			    ; in sync
 
 ;00b: 75      lbmi 1		; 1
-	lbmi_1
 ;045: 7c 83   tml 103		; 7 skip next instruction if lock, 5 cycles + 2 for call
 ;011: 74      lbmi 0		; 1 H := 0 - we are key so don't skip
-			    ; 8 cycles ahead
+	movlw	lockseed
+	movwf	FSR		; these 3 CIC instructions on a key end up loading BM:BL pointing to lockseed
+			    ; 7 cycles ahead, CIC at 211 here
 			    
 ;008: 60      skm 0
 	btfss	INDF, 0		; skm 0 
-			    ; 8 cycles ahead
+			    ; 7 cycles ahead
 ;044: 93      t 013
 	goto	die		; 2 cycles
-			    ; 8 cycles ahead without skip
+			    ; 7 cycles ahead without skip
 			    
-;062: 7c f4   tml 174		; H := 0 in key mode, 8 cycles	+ 2 for call
-	lbmi_0			; 1- FSR = lockseed, no need to check for lock
-			    ; 15 cycles ahead
+;062: 7c f4   tml 174		; H := 1 in key mode, 8 cycles	+ 2 for call
+	lbmi_1			; 1- FSR = lockseed, no need to check for lock
+			    ; 14 cycles ahead
 ;018: 61      skm 1
 	btfss	INDF, 1		; skm 1
 ;04c: b3      t 033		// die
