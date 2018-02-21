@@ -34,7 +34,7 @@
         <platformTool>Simulator</platformTool>
         <languageToolchain>MPASMWIN</languageToolchain>
         <languageToolchainVersion>5.76</languageToolchainVersion>
-        <platform>3</platform>
+        <platform>2</platform>
       </toolsSet>
       <compileType>
         <linkerTool>

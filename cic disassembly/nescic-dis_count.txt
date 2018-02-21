@@ -132,7 +132,7 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 
 			;;
 04a: 5d      xax
-025: 01      adi 1	; A := X + 1
+025: 01      adi 1	; A := X + 1            // add immediate, skip if overflow
 012: 9c      t 01c	; if A = 0 {
 009: 7c af   tml 12f	;	call 12f	// run host
 042: 7d de   tml 35e	;	call 35e	// mangle both

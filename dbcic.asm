@@ -33,7 +33,6 @@
 ;                   `-------'-------
 ;
 
-
 lockseed    equ	    0x20	; 0x20 seed calc and xfr, 0x21-0x2F seed area
 keyseed	    equ	    0x30	; 0x30 seed calc and xfr, 0x31-0x3F seed area
 xreg	    equ	    0x50
@@ -50,7 +49,6 @@ led	    equ	    4
 ;************************************************************************
     __CONFIG _EC_OSC & _WDT_OFF & _PWRTE_OFF & _MCLRE_OFF & _CP_OFF & _CPD_OFF 
 ;************************************************************************
-
 ;************************************************************************
 ; macros
 loadlock    macro L1,L2,L3,L4,L5,L6,L7,L8,L9,LA,LB,LC,LD,LE,LF
@@ -84,7 +82,7 @@ loadlock    macro L1,L2,L3,L4,L5,L6,L7,L8,L9,LA,LB,LC,LD,LE,LF
 	movwf 	lockseed+0xE
 	movlw	LF
 	movwf 	lockseed+0xF
-endm
+    endm
 
 loadkey	    macro K2,K3,K4,K5,K6,K7,K8,K9,KA,KB,KC,KD,KE,KF
 	movlw	K2
@@ -115,20 +113,8 @@ loadkey	    macro K2,K3,K4,K5,K6,K7,K8,K9,KA,KB,KC,KD,KE,KF
 	movwf 	keyseed+0xE
 	movlw	KF
 	movwf 	keyseed+0xF
-endm
+    endm
 
-; the code treats the FSR as the BM:BL register
-; seed memory starts at 0x20, therefore, 
-	; clearing bit4 = lbmi 0
-	; setting bit4 = lbmi 1
-lbmi_0	macro		; lockseed at 0x20
-	bcf	FSR, 4	    
-endm    
-	
-lbmi_1	macro		; keyseed at 0x30
-	bsf	FSR, 4
-endm
-	
 ;************************************************************************
 ; program start
 	org	0x0000
@@ -147,7 +133,7 @@ main
 	movlw	0x90		; global enable interrupts + enable external interrupt
 	movwf	INTCON
 	banksel	TRISIO
-	movlw	0b000101110	; 5 = in, 4 = out, 3 = in, 2 = in, 1 = in, 0 = out
+	movlw	B'00101110'	; 5 = in, 4 = out, 3 = in, 2 = in, 1 = in, 0 = out
 	movwf	TRISIO
 	movlw	0x24		; weak pull-up on 5 and 2
 	movwf	WPU
@@ -198,7 +184,7 @@ main
 	movwf	EEADR		; 1
 	bsf	EECON1, RD	; 1 - read eeprom
 	movf	EEDATA, W	; 1 - region indicator in wreg
-
+	
 ; 85 cycles
 ; 0x00 = 3193 - USA/Canada
 ; 0x01 = 3195 - Europe
@@ -215,7 +201,7 @@ main
 doneload
 	movlw	lockseed	; lbmi 0 - load ahead from mainloop 054
 	movwf	FSR
-	nop
+	banksel GPIO
 	nop
 	nop
 
@@ -328,17 +314,23 @@ testKeySide
 	nop
 			    ; in sync
 ;066: ca      t 04a		
+
 nextOne
 			    
 ;04a: 5d      xax
-;025: 01      adi 1		; A := X + 1
-	incf	xreg, w		; 1
-			    ; 1 cycle ahead
+;025: 01      adi 1		; A := X + 1 ; skip if overflow
+	incf	xreg, f		; 1
+	btfss	xreg, 4		; bit 4 is carry bit
+			    ; in sync
 			
 ;012: 9c      t 01c	; if A = 0 {
+	goto	t01c
 ;009: 7c af   tml 12f	;	call 12f	// run host
+	goto	runhost
 ;042: 7d de   tml 35e	;	call 35e	// mangle both
+	goto	mangle
 ;010: 27      lbli 7	;	L := 7
+	
 ;048: 40      l		;	A := [H:7]
 ;064: 10      skai 0	;	if [H:7] <> 0
 ;072: a8      t 028	;		goto 028
@@ -347,26 +339,19 @@ nextOne
 ;			; }
 ;01c: 5d      xax	; X := A
 ;04e: d4      t 054	; goto 054
-			    
+
+t01c
+	goto	mainloop
 	
+runhost
+	goto	runhost
+	
+mangleboth	
+	goto	mangle
+			    
 finished
 	goto	finished
 	
-;************************************************************************	
-testOtherSide
-;	Die if [H:0].1 = 1
-;;************************************************************************	
-;013: 7c f4   tml 174	;	H := "other side"
-;024: 61      skm 1	;	if [H:0].1 = 1
-;052: 94      t 014
-;029: b3      t 033	;		goto 033	// die
-;014: 00      nop       ;	goto 04a	
-	
-	movlw	lockseed
-	movf	FSR
-	btfss	INDF, 1
-	goto	finished	; no not really, placeholder
-	goto	die
 	
 ;************************************************************************
 nextstreambit
