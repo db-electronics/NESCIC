@@ -160,7 +160,7 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 00b: 75      lbmi 1				// 203
 045: 7c 83   tml 103				// 5 cycles + 2 for call // 210 (tml 103 skip next if lock, BL = 0)
 011: 74      lbmi 0	; H := 0		// 211
-008: 60      skm 0				// 212
+008: 60      skm 0				// 212 - if [H:0].0 = 0 goto t013
 044: 93      t 013				// 213
 062: 7c f4   tml 174	; H := 1
 018: 61      skm 1

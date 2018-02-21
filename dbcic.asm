@@ -236,8 +236,8 @@ mainloop
 				; ahead by 1 cycle here
 			    ; ** 168
 	
-;01a: 75      lbmi 1		; H := 1
-	lbmi_1			; setting bit 4 changes 0x20 to 0x30
+;01a: 75      lbmi 1		; H := 1, FSR = keyseed
+	bsf	FSR, 4		; setting bit 4 changes 0x20 to 0x30
 ;00d: 7c c7   tml 147		; call 147	// [H:0] := next stream bit
 				; tml 147 = 10 cycles + 2 for call
 	call	nextstreambit	; 10 cycles + 2 for call
@@ -245,7 +245,7 @@ mainloop
 			    ; ** 181
 
 ;003: 7c f4   tml 174		; H := 0 in key mode, 8 cycles	+ 2 for call
-	lbmi_0			; FSR = lockseed, no need to check for lock
+	bcf	FSR, 4		; FSR = lockseed, no need to check for lock
 				; ahead by 8 + 2 = 10 cycles
 			    ; ** 182
 				
@@ -293,16 +293,30 @@ mainloop
 	movwf	FSR		; these 3 CIC instructions on a key end up loading BM:BL pointing to lockseed
 			    ; 7 cycles ahead, CIC at 211 here
 			    
-;008: 60      skm 0
-	btfss	INDF, 0		; skm 0 
-			    ; 7 cycles ahead
+;008: 60      skm 0		if [H:0].0 = 0 goto t013
 ;044: 93      t 013
-	goto	die		; 2 cycles
-			    ; 7 cycles ahead without skip
-			    
+;	btfss	INDF, 0		; skm 0 
+			    ; 7 cycles ahead
+	btfsc	INDF, 0		; reverse logic for optimized goto
+;	goto	testOtherSide	; 2 cycles
+	goto	testKeySide
+	
+;013: 7c f4   tml 174	;	H := "other side"
+;024: 61      skm 1	;	if [H:0].1 = 1
+;052: 94      t 014
+;029: b3      t 033	;		goto 033	// die
+;014: 00      nop       ;	goto 04a	
+;testOtherSide
+	btfss	INDF, 1
+	goto	nextOne	    
+	goto	die		 
+			
+	
+testKeySide
 ;062: 7c f4   tml 174		; H := 1 in key mode, 8 cycles	+ 2 for call
-	lbmi_1			; 1- FSR = lockseed, no need to check for lock
-			    ; 14 cycles ahead
+	movlw	keyseed		; 1
+	movwf	FSR		; 1- FSR = lockseed, no need to check for lock
+			    ; 13 cycles ahead
 ;018: 61      skm 1
 	btfss	INDF, 1		; skm 1
 ;04c: b3      t 033		// die
@@ -312,11 +326,48 @@ mainloop
 	movlw	0x3		; burn 15 cycles
 	call	wait		; 
 	nop
+			    ; in sync
 ;066: ca      t 04a		
+nextOne
+			    
+;04a: 5d      xax
+;025: 01      adi 1		; A := X + 1
+	incf	xreg, w		; 1
+			    ; 1 cycle ahead
+			
+;012: 9c      t 01c	; if A = 0 {
+;009: 7c af   tml 12f	;	call 12f	// run host
+;042: 7d de   tml 35e	;	call 35e	// mangle both
+;010: 27      lbli 7	;	L := 7
+;048: 40      l		;	A := [H:7]
+;064: 10      skai 0	;	if [H:7] <> 0
+;072: a8      t 028	;		goto 028
+;			;	else
+;039: d1      t 051	;		goto 051
+;			; }
+;01c: 5d      xax	; X := A
+;04e: d4      t 054	; goto 054
 			    
 	
 finished
 	goto	finished
+	
+;************************************************************************	
+testOtherSide
+;	Die if [H:0].1 = 1
+;;************************************************************************	
+;013: 7c f4   tml 174	;	H := "other side"
+;024: 61      skm 1	;	if [H:0].1 = 1
+;052: 94      t 014
+;029: b3      t 033	;		goto 033	// die
+;014: 00      nop       ;	goto 04a	
+	
+	movlw	lockseed
+	movf	FSR
+	btfss	INDF, 1
+	goto	finished	; no not really, placeholder
+	goto	die
+	
 ;************************************************************************
 nextstreambit
 ;	[H:0] := NEXT STREAM BIT - 10 cycles either pass
@@ -337,7 +388,7 @@ nextstreambit
 ;126: 4c      rit	;	return
 ;			; }
 	
-	movfw	xreg		; xax - not really exchanging but its overwritten right after
+	movfw	xreg		; xax - not really exchanging but it's overwritten right after
 	;movwf	xreg		; lxa - what's the point?
 	addwf	FSR		; add x (a really) 
 	btfss	INDF,0		; l, ska 0 - skip if bit0 = 0 
