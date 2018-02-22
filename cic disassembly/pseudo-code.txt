@@ -1,0 +1,31 @@
+
+H = 0
+nextStreamBit()
+H = 1
+nextStreamBit()
+
+H = 1, BL = 0
+
+out([1:0])
+[1:0] = in()
+out(0)
+
+H = 0
+
+// check if in() is equal to [0:0], else die
+if( [0:0].0 == 0 )
+{
+  if( [1:0].1 == 1 )
+  {
+    die()
+  }
+}else // [0:0].0 was == 1
+{
+  H = 1
+  if( [1:0].1 == 0 )
+  {
+    die()
+  }
+}
+
+goto 0x04a

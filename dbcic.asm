@@ -207,9 +207,11 @@ doneload
 
 ;************************************************************************
 ; 154 cycles to main loop
-mainloop
+mainloop51
 	movlw	0x01		; ldi 1
+mainloop28
 	movwf	xreg		; lxa - load x with a
+mainloop54
 	bcf	FSR, 4		; lbmi 0
 			    ; ** 156 - in sync
 	call	nextstreambit	; tml 147 - 10 cycles + 2 for call
@@ -219,93 +221,48 @@ mainloop
 			    ; ** 181 - in sync
 	movlw	keyseed		; tml 174 ; H := 1 in key mode, 10 cycles + 2 for call
 	movwf	FSR
-			    ; ** 183 - ahead by 10 cyclea
+			    ; ** 183 - ahead by 10 cycles
 	movlw	0x2		; burn 13 cycles
 	call	wait		; need to skip over 3 useless instructions here
-	nop
+	nop			; tengen code tests din here (segher does not), maybe add this
 	nop
 			    ; ** 197 - in sync
-	
-;027: 30      ldi 0
-;053: 41      x
-	movlw	INDF		; x - partly
-	clrf	INDF		; ldi, 0
-			    ; ** 199
-			    ; in sync
-				
-;069: 46      out		; P0 := [1:0]	// 200 ** key and lock both output here
-;034: 55      in		; A := P0	// 201 ** lock is nop here, to permit read
-;05a: 00      nop				// 202 ** lock reads here
-;02d: 47      out0		; P0 := 0	// 203 ** clear output bit
-	movwf	GPIO		; out
-			    ; ** 200
-	movfw	GPIO		; in - GetDin() - tengenc says 201, this is cycle 201
-	nop			; nop
-	bcf	GPIO, dout	; out0
-			    ; ** 203
-			    ; in sync
-				
-;016: 4a      s			; [1:0] := A
-	movwf	INDF		; s
-			    ; ** 204
-			    ; in sync
+	movlw	INDF		; ldi 0, x
+	clrf	INDF		; ldi 0, x
+			    ; ** 199 - in sync
+	movwf	GPIO		; out	    // 200 ** key and lock both output here
+	movfw	GPIO		; in	    // 201 ** lock is nop here, to permit read
+	nop			; nop	    // 202 ** lock reads here
+	bcf	GPIO, dout	; out0	    // 203 ** clear output bit
+			    ; ** 203 - in sync
+	movwf	INDF		; s - store input bit
+			    ; ** 204 - in sync
 
-;00b: 75      lbmi 1		; 1
-;045: 7c 83   tml 103		; 7 skip next instruction if lock, 5 cycles + 2 for call, BL = 0
-;011: 74      lbmi 0		; 1 H := 0 - we are key so don't skip
-	movlw	lockseed
-	movwf	FSR		; these 3 CIC instructions on a key end up loading BM:BL pointing to lockseed
-			    ; ** 206
-			    ; 7 cycles ahead, CIC at 213 here
-			    
-;008: 60      skm 0		if [H:0].0 = 0 goto t013
-;044: 93      t 013
-	btfss	INDF, 0		; skm 0 
-
-;	goto	testOtherSide	; 2 cycles
-	goto	testKeySide
-	
-;013: 7c f4   tml 174	;	H := "other side"
-	movlw	lockseed	
-	movwf	FSR
-;024: 61      skm 1	;	if [H:0].1 = 1
-;052: 94      t 014
-;029: b3      t 033	;		goto 033	// die
-;014: 00      nop       ;	goto 04a
-	
-;testOtherSide
-	btfss	INDF, 1
-	goto	nextOne	    
-	goto	die		 
-			
-	
-testKeySide
-;062: 7c f4   tml 174		; H := 1 in key mode, 8 cycles	+ 2 for call
-	movlw	keyseed		; 1
-	movwf	FSR		; 1- FSR = lockseed, no need to check for lock
-			    ; 13 cycles ahead
-;018: 61      skm 1
-	btfss	INDF, 1		; skm 1
-;04c: b3      t 033		// die
-	goto	die
-			    ; 15 cycles ahead
-			    
-	movlw	0x3		; burn 15 cycles
-	call	wait		; 
-	nop
-			    ; in sync
-;066: ca      t 04a		
-
-nextOne
-			    
+	; check if input bit matches what we output
+	; din = 0x30.1 (keyseed)
+	; calc = 0x20.0 (lockseed)
+	; if ( 0x20.0 != 0x30.1 ) { die() }
+	btfsc	keyseed, 1	; if din == 0
+	goto	rcvdOne	
+rcvdZero
+	btfsc	lockseed, 0	; if calc == 0
+	goto	die		; din == 0, calc == 1 => die
+	goto	endCheckDin		; 
+rcvdOne
+	btfss	lockseed, 0	; if calc == 1
+	goto	die		; din == 1, calc == 0 => die
+	nop			; 6 cycles for comparison either way
+			    ; ** 210 - 20 cycles ahead
+endCheckDin
+			 
 ;04a: 5d      xax
-;025: 01      adi 1		; A := X + 1 ; skip if overflow
-	incf	xreg, f		; 1
-	btfss	xreg, 4		; bit 4 is carry bit
-			    ; in sync
-			
+;025: 01      adi 1	
 ;012: 9c      t 01c	; if A = 0 {
-	goto	t01c
+	incf	xreg, f		; A := X + 1 ; skip if overflow
+	btfsc	xreg, 4		; bit 4 is carry bit
+	goto	rstLoop54	
+			    ; ** 214 when taking goto (no carry)
+			
 ;009: 7c af   tml 12f	;	call 12f	// run host
 	goto	runhost
 ;042: 7d de   tml 35e	;	call 35e	// mangle both
@@ -318,11 +275,18 @@ nextOne
 ;			;	else
 ;039: d1      t 051	;		goto 051
 ;			; }
+	
 ;01c: 5d      xax	; X := A
 ;04e: d4      t 054	; goto 054
 
-t01c
-	goto	mainloop
+rstLoop54
+	; got here with 214 cycles, CIC jumps back to 0x054 at 235
+	; burn 21 cycles - 2 for goto
+	movlw	0x4		; wait = (3*W) + 5
+	call	wait		; burn 17 cycles
+	nop
+	goto	mainloop54
+			    ; ** 235 after goto - in sync
 	
 runhost
 	goto	runhost
@@ -370,69 +334,6 @@ nsbskip
 	clrf	INDF		; ldi 0, s
 	return
 
-	
-;************************************************************************
-	
-loop	
-	movlw	0x1
-loop0
-	addlw	0x30	; key stream
-	movwf	FSR	; store in index reg
-loop1
-	nop
-	nop
-	movf	INDF, w ; load seed value
-	movwf	0x20
-	bcf	0x20, 1	; clear bit 1 
-	btfsc	0x20, 0 ; copy from bit 0
-	bsf	0x20, 1 ; (if set)
-	bsf	0x20, 4 ; LED on
-	movf	0x20, w
-	movwf	GPIO
-	nop
-	movlw	0x10
-	movwf	GPIO	; reset GPIO
-	movlw	0x14
-	call	wait
-	nop
-	nop
-	nop
-	nop
-	nop
-	btfsc	GPIO, 0 ; both pins must be low...
-	goto	die
-	btfsc	GPIO, 1 ; ...when no bit transfer takes place
-	goto	die	; if not -> lock cic error state -> die
-	incf	FSR, f	; next one
-	movlw	0xf
-	andwf	FSR, w
-	btfss	STATUS, Z	
-	goto	loop1
-	call	mangle
-	call	mangle
-	call	mangle
-	movlw	0x2	; wait 10
-	call	wait	;
-	nop
-	nop
-	btfsc	0x37, 0
-	goto	swap
-	banksel	TRISIO
-	bcf	TRISIO, 0
-	bsf	TRISIO, 1
-	goto	swapskip
-swap
-	banksel	TRISIO
-	bsf	TRISIO, 0
-	bcf	TRISIO, 1
-	nop
-swapskip
-	banksel GPIO
-	movf	0x37, w
-	andlw	0xf
-	btfss	STATUS, Z
-	goto	loop0
-	goto	loop
 
 ; --------calculate new seeds--------
 ; had to be unrolled because PIC has an inefficient way of handling
@@ -615,7 +516,6 @@ mangle_key_withskip
 mangle_return
 	return
 ; 73 when goto, 73 when return
-	; missing NOPs?!
 ; CIC has 84 -> 11 nops
 
 mangle_lock

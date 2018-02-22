@@ -1,0 +1,37 @@
+3193 - USA/Canada 
+LOCK: 3952F20F9109997 
+KEY: x952129F910DF97 
+
+3195 - Europe 
+LOCK: $17BEF0AF5706617 
+KEY: $x7BD309F6EF2F97 
+
+3196 - Asia 
+LOCK: 06AD70AF6EF666C 
+KEY: x6ADCF606EF2F97 
+
+3197 - UK/Italy/Australia 
+LOCK: 558937A00E0D66D 
+KEY: x79AA1E0D019D99
+
+Hey, jims cool, i'm looking here(3195a-dis.txt) and see SEED for 3195A is: 
+3195A 
+LOCK: $f7bef827d78ee15 
+KEY: $x7bd1217e67a715 
+but you wrote: 
+3195 - Europe 
+LOCK: $17BEF0AF5706617 
+KEY: $x7BD309F6EF2F97 
+
+nescic-dis.txt and here seed is: 
+NESCIC 
+LOCK: $1952f8271981115 
+KEY: $x95212171985715 
+and: 
+3193 - USA/Canada 
+LOCK: $3952F20F9109997 
+KEY: $x952129F910DF97 
+
+and I'm confused, who is wrong?
+
+found a typo in my seed and wasn't sure how i pulled it off.. thought i double checked... anyway turns out a little typo in the side notes of the seghers dis-assembly was the culprit.. 1952f8271961115 is wrong.. the 0x6 (0b0110) should be 0x8 (0b1000) .. it's all good happens to the best of us .. surprised i didn't catch that though.. oh well
