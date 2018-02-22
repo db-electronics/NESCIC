@@ -96,20 +96,20 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 01a: 75      lbmi 1	; H := 1			// 170
 00d: 7c c7   tml 147	; call 147			// [H:0] := next stream bit - 10 cycles + 2 for call // 182	
 
-003: 7c f4   tml 174	; H := "other side" 		// 8 cycles + 2 for call // 192
-020: 55      in		; A := P0	    		// 193
-050: 67      ska 3	; if A.3 = 0	// if key	// 194
-068: a7      t 027	;	goto 027		// 195
+003: 7c f4   tml 174	; H := "other side" 		// 10 cycles + 2 for call // 194
+020: 55      in		; A := P0	    		// 195
+050: 67      ska 3	; if A.3 = 0	// if key	// 196
+068: a7      t 027	;	goto 027		// 197
 
-074: 30      ldi 0					// 196
-07a: 41      x						// 197
-03d: 46      out	; P0 := [0:0]			// 198 ** key and lock both output here
-01e: 00      nop					// 199 ** key reads here
-00f: 55      in		; A := P0			// 200 ** key is nop here, to permit read
-047: 47      out0	; P0 := 0			// 201
-063: 4a      s		; [0:0] := A			// 202
-071: 75      lbmi 1
-038: 7c 83   tml 103
+074: 30      ldi 0					// 198 - this is the lock portion of the data exchange
+07a: 41      x						// 199
+03d: 46      out	; P0 := [0:0]			// 200 ** key and lock both output here
+01e: 00      nop					// 201 ** key reads here
+00f: 55      in		; A := P0			// 202 ** key is nop here, to permit read
+047: 47      out0	; P0 := 0			// 203
+063: 4a      s		; [0:0] := A			// 204
+071: 75      lbmi 1					// 205
+038: 7c 83   tml 103					
 06e: 74      lbmi 0
 037: 60      skm 0
 05b: 93      t 013	; if [1:0].0 = 1 {
@@ -150,19 +150,19 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 
 
 			;;
-027: 30      ldi 0				// 196
-053: 41      x					// 197
-069: 46      out	; P0 := [1:0]		// 198 ** key and lock both output here
-034: 55      in		; A := P0		// 199 ** lock is nop here, to permit read
-05a: 00      nop				// 200 ** lock reads here
-02d: 47      out0	; P0 := 0		// 201
-016: 4a      s		; [1:0] := A		// 202
-00b: 75      lbmi 1				// 203
-045: 7c 83   tml 103				// 5 cycles + 2 for call // 210 (tml 103 skip next if lock, BL = 0)
-011: 74      lbmi 0	; H := 0		// 211
-008: 60      skm 0				// 212 - if [H:0].0 = 0 goto t013
-044: 93      t 013				// 213
-062: 7c f4   tml 174	; H := 1
+027: 30      ldi 0				// 198
+053: 41      x					// 199
+069: 46      out	; P0 := [1:0]		// 200 ** key and lock both output here
+034: 55      in		; A := P0		// 201 ** lock is nop here, to permit read
+05a: 00      nop				// 202 ** lock reads here
+02d: 47      out0	; P0 := 0		// 203 ** clear output bit
+016: 4a      s		; [1:0] := A		// 204
+00b: 75      lbmi 1				// 205
+045: 7c 83   tml 103				// 5 cycles + 2 for call // 212 (tml 103 skip next if lock, BL = 0)
+011: 74      lbmi 0	; H := 0		// 213
+008: 60      skm 0				// 214 - if [H:0].0 = 0 goto t013
+044: 93      t 013				// 215
+062: 7c f4   tml 174	; H := 1		// 10 cycles + 2 for call // 227
 018: 61      skm 1
 04c: b3      t 033	// die
 066: ca      t 04a
@@ -272,9 +272,9 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 			; else
 168: 4d      ritsk	;	return and skip
 			;; SOME CALLS COME DIRECTLY HERE
-			;; tml 174, in key mode, sets H = 0
+			;; tml 174, in key mode, sets H = 1
 			;; H := "OTHER SIDE"
-			;  8 cycles when key
+			;  10 cycles when key
 174: 74      lbmi 0	; H := 0
 17a: 7c 83   tml 103	; skip if lock: ; 5 cycles + 2 for call
 11e: 75      lbmi 1	; H := 1

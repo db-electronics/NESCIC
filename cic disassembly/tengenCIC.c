@@ -1,0 +1,241 @@
+// Tengen CIC ROM code translated to C
+// by thefox // aspekt
+// E-mail: xofeht@gmail.com
+// 2.12.2006
+// (Fix 3.12.2006: "Dout" output was off by one)
+// Usage: TengenCIC <infile>
+
+#include <stdio.h>
+#include <stdlib.h>
+
+typedef unsigned char t_u8;
+typedef unsigned int t_u32;
+
+static t_u8 RAM[2][16];
+static t_u32 T;             // time, unit is "executed instructions"
+static t_u8 *stream;
+static t_u32 stream_len;
+static t_u32 out_len;       // amount of characters written
+static t_u32 current_dout;  // current state of Dout
+
+static const char *_01[] = {"0", "1"};
+
+t_u8 GetDin(void)
+{
+    if(T < stream_len) return stream[T] == '1';
+    else return 0xFF;
+}
+
+void SetDout(t_u32 dout)
+{
+    static t_u32 last_pos;
+    t_u32 N;
+    t_u32 real_T = T + 1; // reflect Dout on the *next* "instruction cycle"
+
+    out_len += real_T - last_pos + 1;
+
+    // first fill in with T - last_pos of the last values
+    for(N = 0; N < real_T - last_pos; ++N) {
+        printf(_01[current_dout]);
+    }
+    
+    last_pos = real_T + 1;
+    printf(_01[dout]);
+    current_dout = dout;
+}
+
+int Panic(void)
+{
+    // something went terribly wrong :))
+    printf("\n\nAn error occurred at offset %X\n", T);
+
+    return 1;
+}
+
+int EndOfFile(void)
+{
+    // Fill in the rest to get matching length
+    t_u32 N;
+    for(N = 0; N < stream_len - out_len; ++N) {
+        printf(_01[current_dout]);
+    }
+
+    return 0;
+}
+
+int main(int argc, char **argv)
+{
+    FILE *fp;
+    int N, I, B;
+
+    if(--argc < 1) {
+        printf("Usage: TengenCIC <infile>\n");
+        return 2;
+    }
+
+    fp = fopen(argv[1], "rb");
+
+    fseek(fp, 0, SEEK_END);
+    stream_len = ftell(fp);
+    rewind(fp);
+
+    stream = malloc(stream_len);
+    fread(stream, 1, stream_len, fp);
+
+    fclose(fp);
+
+    // --- CIC code begins ---
+
+    T = 0;
+
+    RAM[0][0x1] = 0x2;
+    // ...
+    RAM[0][0x4] = 0x2;
+    RAM[0][0x5] = 1;
+    RAM[0][0x6] = 0x2;
+    RAM[0][0x7] = 0x9;
+    RAM[0][0x8] = 0xF;
+    RAM[0][0x9] = 0x9;
+    RAM[0][0xA] = 1;
+    RAM[0][0xB] = 0;
+    RAM[0][0xC] = 0x8;
+    RAM[0][0xD] = 1;
+    RAM[0][0xE] = 2;
+    RAM[0][0xF] = 4;
+    
+    T += 0x21;
+
+    // Timing critical code
+    for(N = 0xC; N < 0x10; ++N) {
+        t_u8 tmp = RAM[0][N];
+        t_u8 din = GetDin();
+
+        if(din & 1) {
+            RAM[0][1] += RAM[0][N];
+        }
+        RAM[0][N] = din;
+
+        T += 0xF;
+    }
+
+    RAM[0][1] &= 0xF;
+
+    RAM[0][0x2] = 0x9; 
+    RAM[0][0x3] = 0x5;
+    // ...
+    RAM[0][0xC] = 0xD;
+    RAM[0][0xD] = 0xF; 
+    RAM[0][0xE] = 0x9; 
+    RAM[0][0xF] = 0x7;
+
+    for(N = 2; N < 0x10; ++N) {
+        RAM[1][N] = RAM[0][N];
+    }
+
+    RAM[1][0x1] = 0x3;
+    RAM[1][0x5] = 0xF;
+    RAM[1][0x7] = 0;
+    RAM[1][0xC] = 9;
+    RAM[1][0xD] = 9;
+
+    // The actual main loop starts here
+
+    T += 0x66; // T = 0xC3
+
+    for(;;) {
+        // Number of iterations for next loop = 16 - N
+        N = (RAM[0][0x7] + 8) & 0xF;
+        if(N == 0) {
+            N = 1;
+            T += 2;
+        }
+
+        // Here the bits are exchanged between the lock and the key
+        for(; N < 0x10; ++N) {
+            t_u8 din;
+
+            // First GetDin() occurs at T = 0xC3
+            din = GetDin();
+            if(din == 1) return Panic();
+
+            // EOF-check, not part of actual CIC code
+            if(din == 0xFF) return EndOfFile();
+
+            T += 5;
+
+            // Timing critical code ------
+            SetDout(RAM[0][N] & 1); T++;
+            T++;
+            din = GetDin(); T++;
+
+            // EOF-check, not part of actual CIC code
+            if(din == 0xFF) return EndOfFile();
+
+            SetDout(0); T++;
+
+            // Check if the Din matches with what we have calculated
+            if(din != (RAM[1][N] & 1)) return Panic();
+
+            T += 0x46;
+        }
+
+        // Update LOCK and KEY tables (actually, the order doesn't matter)
+        for(B = 1; B >= 0; --B) {
+            t_u8 *R = &RAM[B][0];
+
+            N = (R[0xF] + 0xE) & 0xF;
+
+            // Mangle table N + 1 times
+            for(; N >= 0; --N) {
+                t_u8 tmp; 
+                t_u8 P = 0x3;
+                t_u8 sum;
+
+                tmp = R[0x3] + R[0x2] + 1;
+                if(tmp < 0x10) {
+                    sum = R[0x3];
+                    R[0x3] = tmp;
+                    P = 0x4;
+                } else {
+                    sum = tmp & 0xF;
+                }
+
+                // P = 3 or 4
+                sum += R[P];
+                R[P] = sum & 0xF;
+
+                tmp = R[P + 1];
+                sum += tmp;
+                R[P + 1] = sum & 0xF;
+
+                tmp += 8;
+                if(tmp < 0x10) {
+                    tmp += R[P + 2];
+                }
+
+                sum = R[P + 2];
+                R[P + 2] = tmp & 0xF;
+
+                // If we didn't modify R[0x6] yet...
+                if(P == 3) {
+                    sum += R[0x6] + 1;
+                    R[0x6] = sum & 0xF;
+                    T += 6;
+                }
+
+                sum += 0x8;
+                for(I = 7; I < 0x10; ++I) {
+                    sum += R[I] + 9;
+                    R[I] = sum & 0xF;
+                }
+
+                R[1] = (N + 1 + R[1]) & 0xF;
+                R[2] = (~(R[1] + R[2]) + 1) & 0xF;
+
+                T += 0x4E;
+            }
+        }
+
+        T += 0x1D;
+    }
+}

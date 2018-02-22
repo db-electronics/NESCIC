@@ -199,99 +199,80 @@ main
 
 ; 149 cycles, 5 cycles to burn
 doneload
-	movlw	lockseed	; lbmi 0 - load ahead from mainloop 054
-	movwf	FSR
 	banksel GPIO
+	nop
+	nop
 	nop
 	nop
 
 ;************************************************************************
 ; 154 cycles to main loop
 mainloop
-;051: 31      ldi 1		; A := 1
-;028: 5c      lxa		; X := A
-;054: 74      lbmi 0		; H := 0
 	movlw	0x01		; ldi 1
 	movwf	xreg		; lxa - load x with a
-				; ahead by 1 cycle here
-			    ; ** 156
-				
-;06a: 7c c7   tml 147		; call 147	// [H:0] := next stream bit
-				; tml 147 = 10 cycles + 2 for call
-	call	nextstreambit	; 10 cycles + 2 for call
-				; ahead by 1 cycle here
-			    ; ** 168
-	
-;01a: 75      lbmi 1		; H := 1, FSR = keyseed
-	bsf	FSR, 4		; setting bit 4 changes 0x20 to 0x30
-;00d: 7c c7   tml 147		; call 147	// [H:0] := next stream bit
-				; tml 147 = 10 cycles + 2 for call
-	call	nextstreambit	; 10 cycles + 2 for call
-				; ahead by 1 cycle here
-			    ; ** 181
-
-;003: 7c f4   tml 174		; H := 0 in key mode, 8 cycles	+ 2 for call
-	bcf	FSR, 4		; FSR = lockseed, no need to check for lock
-				; ahead by 8 + 2 = 10 cycles
-			    ; ** 182
-				
-;020: 55      in		; A := P0
-;050: 67      ska 3		; if A.3 = 0	// if key
-;068: a7      t 027		;	goto 027
-				; 3 cycles
-				; ahead by 10 + 3 cycles
-	
+	bcf	FSR, 4		; lbmi 0
+			    ; ** 156 - in sync
+	call	nextstreambit	; tml 147 - 10 cycles + 2 for call
+			    ; ** 168 - in sync
+	bsf	FSR, 4		; lbmi 1 - setting bit 4 changes 0x20 to 0x30
+	call	nextstreambit	; tml 147 - 10 cycles + 2 for call
+			    ; ** 181 - in sync
+	movlw	keyseed		; tml 174 ; H := 1 in key mode, 10 cycles + 2 for call
+	movwf	FSR
+			    ; ** 183 - ahead by 10 cyclea
 	movlw	0x2		; burn 13 cycles
-	call	wait		; 
+	call	wait		; need to skip over 3 useless instructions here
 	nop
 	nop
-			    ; ** 195
-			    ; in sync
+			    ; ** 197 - in sync
 	
 ;027: 30      ldi 0
 ;053: 41      x
 	movlw	INDF		; x - partly
 	clrf	INDF		; ldi, 0
-			    ; ** 197
+			    ; ** 199
 			    ; in sync
 				
-;069: 46      out		; P0 := [1:0]
-;034: 55      in		; A := P0
-;05a: 00      nop
-;02d: 47      out0		; P0 := 0
+;069: 46      out		; P0 := [1:0]	// 200 ** key and lock both output here
+;034: 55      in		; A := P0	// 201 ** lock is nop here, to permit read
+;05a: 00      nop				// 202 ** lock reads here
+;02d: 47      out0		; P0 := 0	// 203 ** clear output bit
 	movwf	GPIO		; out
-			    ; ** 198 
-	movfw	GPIO		; in - GetDin() - tengenc says 195
+			    ; ** 200
+	movfw	GPIO		; in - GetDin() - tengenc says 201, this is cycle 201
 	nop			; nop
 	bcf	GPIO, dout	; out0
-			    ; ** 201
+			    ; ** 203
 			    ; in sync
 				
 ;016: 4a      s			; [1:0] := A
 	movwf	INDF		; s
-			    ; ** 202
+			    ; ** 204
 			    ; in sync
 
 ;00b: 75      lbmi 1		; 1
-;045: 7c 83   tml 103		; 7 skip next instruction if lock, 5 cycles + 2 for call
+;045: 7c 83   tml 103		; 7 skip next instruction if lock, 5 cycles + 2 for call, BL = 0
 ;011: 74      lbmi 0		; 1 H := 0 - we are key so don't skip
 	movlw	lockseed
 	movwf	FSR		; these 3 CIC instructions on a key end up loading BM:BL pointing to lockseed
-			    ; 7 cycles ahead, CIC at 211 here
+			    ; ** 206
+			    ; 7 cycles ahead, CIC at 213 here
 			    
 ;008: 60      skm 0		if [H:0].0 = 0 goto t013
 ;044: 93      t 013
-;	btfss	INDF, 0		; skm 0 
-			    ; 7 cycles ahead
-	btfsc	INDF, 0		; reverse logic for optimized goto
+	btfss	INDF, 0		; skm 0 
+
 ;	goto	testOtherSide	; 2 cycles
 	goto	testKeySide
 	
 ;013: 7c f4   tml 174	;	H := "other side"
+	movlw	lockseed	
+	movwf	FSR
 ;024: 61      skm 1	;	if [H:0].1 = 1
 ;052: 94      t 014
 ;029: b3      t 033	;		goto 033	// die
-;014: 00      nop       ;	goto 04a	
+;014: 00      nop       ;	goto 04a
+	
 ;testOtherSide
 	btfss	INDF, 1
 	goto	nextOne	    
