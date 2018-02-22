@@ -207,7 +207,7 @@ doneload
 
 ;************************************************************************
 ; 154 cycles to main loop
-mainloop51
+mainloop
 	movlw	0x01		; ldi 1
 mainloop28
 	movwf	xreg		; lxa - load x with a
@@ -264,18 +264,28 @@ endCheckDin
 			    ; ** 214 when taking goto (no carry)
 			
 ;009: 7c af   tml 12f	;	call 12f	// run host
-	goto	runhost
+	call	runhost		; 7 cycles + 2 for call
+	
 ;042: 7d de   tml 35e	;	call 35e	// mangle both
-	goto	mangle
+	call	mangleboth
+	
 ;010: 27      lbli 7	;	L := 7
+	movlw	0x0F
+	iorwf	FSR, f
+	bcf	FSR, 3
 	
 ;048: 40      l		;	A := [H:7]
 ;064: 10      skai 0	;	if [H:7] <> 0
+	btfsc	INDF, 0
+	
 ;072: a8      t 028	;		goto 028
+	goto	mainloop28
 ;			;	else
 ;039: d1      t 051	;		goto 051
+	goto	mainloop
 ;			; }
 	
+	;; never falls through here
 ;01c: 5d      xax	; X := A
 ;04e: d4      t 054	; goto 054
 
@@ -288,38 +298,35 @@ rstLoop54
 	goto	mainloop54
 			    ; ** 235 after goto - in sync
 	
-runhost
-	goto	runhost
 	
-mangleboth	
-	goto	mangle
-			    
+;************************************************************************
+runhost
+;	BL = 1, outputs = 0 - 7 cycles (CIC takes 16 cycles)
+;************************************************************************			    
+	clrf	GPIO	    ; 1 - clear outputs
+	movlw	0xF0	    ; mask off nibble
+	andwf	FSR, f	    ; apply to BL
+	movlw	0x01	    ; load BL with 1
+	iorwf	FSR, f	
+	return		    ; return, 7 cycles    
+
+;************************************************************************
+mangleboth
+;************************************************************************	
+	goto	mangleboth
+	return
+
+	
 finished
 	goto	finished
 	
 	
 ;************************************************************************
 nextstreambit
-;	[H:0] := NEXT STREAM BIT - 10 cycles either pass
+;	tml 0x147
+;	[H:0] := NEXT STREAM BIT - 10 cycles either pass, CIC takes 10 cycles
 ;************************************************************************
-;147: 5d      xax
-;163: 5c      lxa
-;171: 57      xal
-;138: 40      l
-;15c: 20      lbli 0
-;16e: 64      ska 0
-;137: 9b      t 11b	; if [H:X].0 = 1 {
-;15b: 35      ldi 5
-;16d: 4a      s		;	[H:0] := 5
-;136: 4c      rit	;	return
-;			; } else {
-;11b: 30      ldi 0
-;14d: 4a      s		;	[H:0] := 0
-;126: 4c      rit	;	return
-;			; }
-	
 	movfw	xreg		; xax - not really exchanging but it's overwritten right after
-	;movwf	xreg		; lxa - what's the point?
 	addwf	FSR		; add x (a really) 
 	btfss	INDF,0		; l, ska 0 - skip if bit0 = 0 
 	goto	nsbskip		; t 11b

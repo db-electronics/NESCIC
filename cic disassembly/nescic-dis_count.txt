@@ -11,7 +11,7 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
               +------------------+
 
 			;; RESET
-000: 30      ldi 0
+000: 30      ldi 0				//
 040: 20      lbli 0
 060: 4a      s		; [H:0] := 0
 
@@ -134,8 +134,8 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 04a: 5d      xax				// 231
 025: 01      adi 1	; A := X + 1            // 232 - add immediate, skip if overflow
 012: 9c      t 01c	; if A = 0 {		// 233 
-009: 7c af   tml 12f	;	call 12f	// run host
-042: 7d de   tml 35e	;	call 35e	// mangle both
+009: 7c af   tml 12f	;	call 12f	// 18 - 16 cycles + 2 for call - run host
+042: 7d de   tml 35e	;	call 35e	//   mangle both
 010: 27      lbli 7	;	L := 7
 048: 40      l		;	A := [H:7]
 064: 10      skai 0	;	if [H:7] <> 0
@@ -218,25 +218,28 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 
 
 			;; RUN HOST
-12f: 7c 83   tml 103
-16b: e1      t 161	; if lock {
-175: 31      ldi 1	;	A := 1	// pull host reset high
+			;; 16 cycles
+			;; out 0
+			;; BL = 1
+12f: 7c 83   tml 103				// 7 - 5 cycles + 2 for call (don't skip next because we are key, BL = 0)
+16b: e1      t 161	; if lock {		// 8 - don't skip, we are key
+175: 31      ldi 1	;	A := 1		// pull host reset high
 13a: 21      lbli 1
 11d: 00      nop
 10e: 00      nop
 107: 00      nop
 143: dd      t 15d	; } else {
 
-161: 30      ldi 0	;	A := 0
-130: 21      lbli 1
-158: 46      out	;	P1 := 0
-16c: 00      nop
-176: 00      nop
-13b: 00      nop
+161: 30      ldi 0	;	A := 0		// 9
+130: 21      lbli 1				// 10
+158: 46      out	;	P1 := 0		// 11
+16c: 00      nop				// 12
+176: 00      nop				// 13
+13b: 00      nop				// 14
 			; }
 
-15d: 46      out	; P1 := A
-12e: 4c      rit
+15d: 46      out	; P1 := A		// 15
+12e: 4c      rit				// 16
 
 
 
@@ -522,7 +525,7 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 
 
 			;; MANGLE BOTH
-35e: 74      lbmi 0	; H := 0
+35e: 74      lbmi 0	; H := 0        // 1 
 32f: 7d f5   tml 375	; call 375	// mangle one
 36b: 75      lbmi 1	; H := 1
 			;		// mangle one
@@ -530,37 +533,37 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 
 
 			;; MANGLE ONE
-375: 2f      lbli f
-33a: 40      l		; A := [H:f]
+375: 2f      lbli f				// 1
+33a: 40      l		; A := [H:f]		// 2
 
 			; forever {
-31d: 5c      lxa	;	X := A
-30e: 48      sc
-307: 21      lbli 1
-343: 72      adc
-361: 4a      s		;	[H:1] += X + 1
-330: 52      li
-358: 72      adc
-36c: 54      coma
-376: 42      xi		;	A := [H:2] ; [H:2] = ~([H:1] + [H:2] + 1) ; L := 3
-33b: 73      adcsk	;	A += [H:3] + 1 ; if no carry:
-35d: 42      xi		;		t = A ; A := [H:3] ; [H:3] := t ; L++
-32e: 70      ad
-317: 4a      s		;	[H:L] += A
-34b: 52      li		;	A := [H:L] ; L++
-365: 49      rc		;	C := 0
-332: 72      adc	;	A += [H:L]
-319: 42      xi		;	t = [H:L] ; [H:L] := A ; A := t ; L++
-30c: 08      adi 8	;	A += 8 ; if no carry:
-346: 72      adc	;		A += [H:L]
-323: 42      xi		;	t = [H:L] ; [H:L] := A ; A := t ; L++
-
-351: 01      adi 1
-328: 00      nop
-354: 72      adc
-36a: 4a      s
-335: 52      li
-31a: d1      t 351
+31d: 5c      lxa	;	X := A		// 3
+30e: 48      sc					// 4
+307: 21      lbli 1				// 5
+343: 72      adc				// 6
+361: 4a      s		;	[H:1] += X + 1  // 7
+330: 52      li					// 8
+358: 72      adc				// 9
+36c: 54      coma				// 10
+376: 42      xi		;	A := [H:2] ; [H:2] = ~([H:1] + [H:2] + 1) ; L := 3  	// 11
+33b: 73      adcsk	;	A += [H:3] + 1 ; if no carry:				// 12
+35d: 42      xi		;		t = A ; A := [H:3] ; [H:3] := t ; L++		// 13
+32e: 70      ad								// 14
+317: 4a      s		;	[H:L] += A				// 15
+34b: 52      li		;	A := [H:L] ; L++			// 16
+365: 49      rc		;	C := 0					// 17
+332: 72      adc	;	A += [H:L]				// 18
+319: 42      xi		;	t = [H:L] ; [H:L] := A ; A := t ; L++	// 19
+30c: 08      adi 8	;	A += 8 ; if no carry:			// 20
+346: 72      adc	;		A += [H:L]			// 21
+323: 42      xi		;	t = [H:L] ; [H:L] := A ; A := t ; L++	// 22
+			
+351: 01      adi 1		// 23
+328: 00      nop		// 24
+354: 72      adc		// 25
+36a: 4a      s			// 26
+335: 52      li			// 27 - skip if overflow
+31a: d1      t 351		
 30d: 5d      xax
 306: 0f      adi f
 303: 4c      rit
